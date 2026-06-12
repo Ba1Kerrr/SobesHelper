@@ -14,6 +14,12 @@ const Settings: React.FC = () => {
   const [primaryLanguage, setPrimaryLanguage] = useState('auto');
   const [secondaryLanguage, setSecondaryLanguage] = useState('');
   const [deepgramApiKey, setDeepgramApiKey] = useState('');
+  const [sttProvider, setSttProvider] = useState<'deepgram' | '60db'>('deepgram');
+  const [sixtydbApiKey, setSixtydbApiKey] = useState('');
+  const [sixtydbVoiceId, setSixtydbVoiceId] = useState('');
+  const [ttsAutoplay, setTtsAutoplay] = useState(false);
+  const [voices, setVoices] = useState<Array<{ voice_id: string; name: string; labels?: { language_name?: string; gender?: string; accent?: string } }>>([]);
+  const [voicesLoading, setVoicesLoading] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -29,6 +35,10 @@ const Settings: React.FC = () => {
       setPrimaryLanguage(config.primaryLanguage || 'auto');
       setSecondaryLanguage(config.secondaryLanguage || '');
       setDeepgramApiKey(config.deepgram_api_key || '');
+      setSttProvider(config.stt_provider === '60db' ? '60db' : 'deepgram');
+      setSixtydbApiKey(config.sixtydb_api_key || '');
+      setSixtydbVoiceId(config.sixtydb_voice_id || '');
+      setTtsAutoplay(!!config.tts_autoplay);
     } catch (err) {
       console.error('Failed to load configuration', err);
       setError('Failed to load configuration. Please check your settings.');
@@ -44,11 +54,38 @@ const Settings: React.FC = () => {
         api_call_method: apiCallMethod,
         primaryLanguage: primaryLanguage,
         deepgram_api_key: deepgramApiKey,
+        stt_provider: sttProvider,
+        sixtydb_api_key: sixtydbApiKey,
+        sixtydb_voice_id: sixtydbVoiceId,
+        tts_autoplay: ttsAutoplay,
       });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       setError('Failed to save configuration');
+    }
+  };
+
+  const loadVoices = async () => {
+    if (!sixtydbApiKey) {
+      setError('Enter your 60db API key first to load voices.');
+      return;
+    }
+    try {
+      setVoicesLoading(true);
+      const result = await window.electronAPI.get60dbVoices({ sixtydb_api_key: sixtydbApiKey });
+      if (result.success) {
+        setVoices(result.voices);
+        if (!result.voices.length) {
+          setError('No 60db voices found for this account.');
+        }
+      } else {
+        setError(`Failed to load 60db voices: ${result.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      setError('Failed to load 60db voices.');
+    } finally {
+      setVoicesLoading(false);
     }
   };
 
@@ -131,6 +168,20 @@ const Settings: React.FC = () => {
         </select>
       </div>
       <div className="mb-4">
+        <label className="label">Transcription Provider (STT)</label>
+        <select
+          value={sttProvider}
+          onChange={(e) => setSttProvider(e.target.value as 'deepgram' | '60db')}
+          className="select select-bordered w-full"
+        >
+          <option value="deepgram">Deepgram</option>
+          <option value="60db">60db</option>
+        </select>
+        <label className="label">
+          <span className="label-text-alt">Choose which engine transcribes the meeting audio in real time.</span>
+        </label>
+      </div>
+      <div className="mb-4">
         <label className="label">Deepgram API Key</label>
         <input
           type="password"
@@ -138,6 +189,53 @@ const Settings: React.FC = () => {
           onChange={(e) => setDeepgramApiKey(e.target.value)}
           className="input input-bordered w-full"
         />
+      </div>
+      <div className="mb-4">
+        <label className="label">60db API Key</label>
+        <input
+          type="password"
+          value={sixtydbApiKey}
+          onChange={(e) => setSixtydbApiKey(e.target.value)}
+          className="input input-bordered w-full"
+        />
+        <label className="label">
+          <span className="label-text-alt">Used for 60db transcription (if selected above) and for speaking answers aloud.</span>
+        </label>
+      </div>
+      <div className="mb-4">
+        <label className="label">60db Voice (Text-to-Speech)</label>
+        <div className="flex space-x-2">
+          <select
+            value={sixtydbVoiceId}
+            onChange={(e) => setSixtydbVoiceId(e.target.value)}
+            className="select select-bordered flex-1"
+          >
+            <option value="">System default</option>
+            {voices.map((v) => (
+              <option key={v.voice_id} value={v.voice_id}>
+                {v.name}
+                {v.labels?.language_name ? ` (${v.labels.language_name}${v.labels.accent ? `, ${v.labels.accent}` : ''})` : ''}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={loadVoices} className="btn btn-outline" disabled={voicesLoading}>
+            {voicesLoading ? 'Loading...' : 'Load Voices'}
+          </button>
+        </div>
+      </div>
+      <div className="mb-4">
+        <label className="flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={ttsAutoplay}
+            onChange={(e) => setTtsAutoplay(e.target.checked)}
+            className="checkbox mr-2"
+          />
+          <span>Auto-speak GPT answers (60db TTS)</span>
+        </label>
+        <label className="label">
+          <span className="label-text-alt">Best with headphones/a private output device, so playback isn&apos;t captured by the meeting.</span>
+        </label>
       </div>
       <div className="mb-4">
         <label className="label">Primary Language</label>
