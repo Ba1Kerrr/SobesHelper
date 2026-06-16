@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     removeListener: (channel: string, listener: (event: any, ...args: any[]) => void) => ipcRenderer.removeListener(channel, listener),
   },
   callOpenAI: (params: any) => ipcRenderer.invoke('callOpenAI', params),
+  speak60db: (text: string, config: any) => ipcRenderer.invoke('speak-60db', { text, config }),
+  get60dbVoices: (config: any) => ipcRenderer.invoke('get-60db-voices', config),
   loadAudioProcessor: (): Promise<string> => ipcRenderer.invoke('load-audio-processor'),
   getSystemAudioStream: () => ipcRenderer.invoke('get-system-audio-stream'),
   transcribeAudioFile: (filePath: string, config: any) => ipcRenderer.invoke('transcribe-audio-file', filePath, config),

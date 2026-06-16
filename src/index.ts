@@ -18,6 +18,7 @@ import fs from "fs";
 import path from "path";
 import { Buffer } from "buffer";
 import { createClient, LiveTranscriptionEvents } from "@deepgram/sdk";
+import WebSocket from "ws";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 import electronSquirrelStartup from "electron-squirrel-startup";
@@ -217,6 +218,10 @@ app.on("before-quit", () => {
     api_call_method: config.api_call_method || "direct",
     primaryLanguage: config.primaryLanguage || "en",
     deepgram_api_key: config.deepgram_api_key || "",
+    stt_provider: config.stt_provider || "deepgram",
+    sixtydb_api_key: config.sixtydb_api_key || "",
+    sixtydb_voice_id: config.sixtydb_voice_id || "",
+    tts_autoplay: config.tts_autoplay || false,
   };
   store.clear();
   store.set("config", apiInfo);
@@ -408,86 +413,293 @@ function normalizeApiBaseUrl(url: string): string {
   return url;
 }
 
+// ---------------------------------------------------------------------------
+// Real-time Speech-to-Text (provider-agnostic)
+// ---------------------------------------------------------------------------
+// The renderer talks to a single set of channels (start-stt / send-audio /
+// stop-stt) and listens for unified events (stt-transcript / stt-status /
+// stt-error). Internally we route to either Deepgram (via @deepgram/sdk) or
+// 60db (via a raw WebSocket). Both expect 16 kHz, mono, 16-bit linear PCM,
+// which is exactly what InterviewPage produces.
+
+// Active connections. Only one provider is active at a time.
 let deepgramConnection: any = null;
+let sixtydbSocket: WebSocket | null = null;
+let activeProvider: "deepgram" | "60db" | null = null;
 
-ipcMain.handle("start-deepgram", async (event, config) => {
-  try {
-    if (!config.deepgram_key) {
-      throw new Error("Deepgram API key lose");
-    }
-    const deepgram = createClient(config.deepgram_key);
-    deepgramConnection = deepgram.listen.live({
-      punctuate: true,
-      interim_results: false,
-      model: "general",
-      language: config.primaryLanguage || "en",
-      encoding: "linear16",
-      sample_rate: 16000,
-      endpointing: 1500,
-    });
+function startDeepgram(event: Electron.IpcMainInvokeEvent, config: any) {
+  if (!config.deepgram_key) {
+    throw new Error("Deepgram API key missing");
+  }
+  const deepgram = createClient(config.deepgram_key);
+  deepgramConnection = deepgram.listen.live({
+    punctuate: true,
+    interim_results: false,
+    model: "general",
+    language: config.primaryLanguage || "en",
+    encoding: "linear16",
+    sample_rate: 16000,
+    endpointing: 1500,
+  });
 
-    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
-      event.sender.send("deepgram-status", { status: "open" });
-    });
+  deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
+    event.sender.send("stt-status", { status: "open", provider: "deepgram" });
+  });
 
-    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
-      event.sender.send("deepgram-status", { status: "closed" });
-    });
+  deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
+    event.sender.send("stt-status", { status: "closed", provider: "deepgram" });
+  });
 
-    deepgramConnection.addListener(
-      LiveTranscriptionEvents.Transcript,
-      (data: any) => {
-        if (
-          data &&
-          data.is_final &&
-          data.channel &&
-          data.channel.alternatives &&
-          data.channel.alternatives[0]
-        ) {
-          const transcript = data.channel.alternatives[0].transcript;
-          if (transcript) {
-            event.sender.send("deepgram-transcript", {
-              transcript,
-              is_final: true,
-            });
-          }
+  deepgramConnection.addListener(
+    LiveTranscriptionEvents.Transcript,
+    (data: any) => {
+      if (
+        data &&
+        data.is_final &&
+        data.channel &&
+        data.channel.alternatives &&
+        data.channel.alternatives[0]
+      ) {
+        const transcript = data.channel.alternatives[0].transcript;
+        if (transcript) {
+          event.sender.send("stt-transcript", { transcript, is_final: true });
         }
       }
+    }
+  );
+
+  deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err: any) => {
+    event.sender.send("stt-error", { provider: "deepgram", error: err });
+  });
+
+  return new Promise<void>((resolve, reject) => {
+    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () =>
+      resolve()
+    );
+    deepgramConnection.addListener(LiveTranscriptionEvents.Error, reject);
+    setTimeout(() => reject(new Error("Deepgram timeout")), 10000);
+  });
+}
+
+function start60dbStt(event: Electron.IpcMainInvokeEvent, config: any) {
+  if (!config.sixtydb_key) {
+    throw new Error("60db API key missing");
+  }
+  const url = `wss://api.60db.ai/ws/stt?apiKey=${encodeURIComponent(
+    config.sixtydb_key
+  )}`;
+  const socket = new WebSocket(url);
+  sixtydbSocket = socket;
+
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("60db STT timeout")),
+      10000
     );
 
-    deepgramConnection.addListener(
-      LiveTranscriptionEvents.Error,
-      (err: any) => {
-        event.sender.send("deepgram-error", err);
-      }
-    );
-
-    await new Promise((resolve, reject) => {
-      deepgramConnection.addListener(LiveTranscriptionEvents.Open, resolve);
-      deepgramConnection.addListener(LiveTranscriptionEvents.Error, reject);
-      setTimeout(() => reject(new Error("Deepgram timeout")), 10000);
+    socket.on("open", () => {
+      // Tell 60db we will stream browser PCM (linear) at 16 kHz.
+      const language =
+        config.primaryLanguage && config.primaryLanguage !== "auto"
+          ? config.primaryLanguage
+          : "en";
+      socket.send(
+        JSON.stringify({
+          type: "start",
+          languages: [language],
+          config: {
+            encoding: "linear",
+            sample_rate: 16000,
+            utterance_end_ms: 1000,
+            continuous_mode: true,
+            interim_results_frequency: 0,
+            audio_enhancement: "adaptive",
+            diarize: false,
+          },
+        })
+      );
     });
 
+    socket.on("message", (raw: WebSocket.RawData) => {
+      let msg: any;
+      try {
+        msg = JSON.parse(raw.toString());
+      } catch {
+        return;
+      }
+
+      // Server is ready for audio.
+      if (msg.type === "connected") {
+        clearTimeout(timeout);
+        event.sender.send("stt-status", { status: "open", provider: "60db" });
+        resolve();
+        return;
+      }
+
+      // Final transcript. We only forward the canonical (speech_final) result
+      // with non-empty text, mirroring the Deepgram is_final filter.
+      if (
+        msg.type === "transcription" &&
+        msg.speech_final === true &&
+        msg.text &&
+        msg.text.trim()
+      ) {
+        event.sender.send("stt-transcript", {
+          transcript: msg.text,
+          is_final: true,
+        });
+        return;
+      }
+
+      if (msg.type === "error") {
+        event.sender.send("stt-error", { provider: "60db", error: msg });
+      }
+    });
+
+    socket.on("error", (err) => {
+      clearTimeout(timeout);
+      event.sender.send("stt-error", { provider: "60db", error: err.message });
+      reject(err);
+    });
+
+    socket.on("close", () => {
+      event.sender.send("stt-status", { status: "closed", provider: "60db" });
+    });
+  });
+}
+
+ipcMain.handle("start-stt", async (event, config) => {
+  try {
+    const provider: "deepgram" | "60db" =
+      config.stt_provider === "60db" ? "60db" : "deepgram";
+    activeProvider = provider;
+
+    if (provider === "60db") {
+      await start60dbStt(event, config);
+    } else {
+      await startDeepgram(event, config);
+    }
     return { success: true };
   } catch (error) {
+    activeProvider = null;
     return { success: false, error: error.message };
   }
 });
 
-ipcMain.handle("send-audio-to-deepgram", async (event, audioData) => {
-  if (deepgramConnection) {
-    try {
-      const buffer = Buffer.from(audioData);
+ipcMain.handle("send-audio", async (event, audioData) => {
+  try {
+    const buffer = Buffer.from(audioData);
+    if (activeProvider === "deepgram" && deepgramConnection) {
       deepgramConnection.send(buffer);
-    } catch (error) {
-      console.error("failed send data to Deepgram :", error);
+    } else if (
+      activeProvider === "60db" &&
+      sixtydbSocket &&
+      sixtydbSocket.readyState === WebSocket.OPEN
+    ) {
+      sixtydbSocket.send(
+        JSON.stringify({
+          type: "audio",
+          audio: buffer.toString("base64"),
+          encoding: "linear",
+          sample_rate: 16000,
+        })
+      );
     }
+  } catch (error) {
+    console.error("failed to send audio to STT provider:", error);
   }
 });
 
-ipcMain.handle("stop-deepgram", () => {
+ipcMain.handle("stop-stt", () => {
   if (deepgramConnection) {
-    deepgramConnection.finish();
+    try {
+      deepgramConnection.finish();
+    } catch {
+      /* ignore */
+    }
     deepgramConnection = null;
+  }
+  if (sixtydbSocket) {
+    try {
+      if (sixtydbSocket.readyState === WebSocket.OPEN) {
+        sixtydbSocket.send(JSON.stringify({ type: "stop" }));
+      }
+      sixtydbSocket.close();
+    } catch {
+      /* ignore */
+    }
+    sixtydbSocket = null;
+  }
+  activeProvider = null;
+});
+
+// ---------------------------------------------------------------------------
+// 60db Text-to-Speech + voices
+// ---------------------------------------------------------------------------
+
+ipcMain.handle("speak-60db", async (event, { text, config }) => {
+  try {
+    if (!config.sixtydb_api_key) {
+      throw new Error("60db API key missing");
+    }
+    if (!text || !text.trim()) {
+      throw new Error("No text to synthesize");
+    }
+    // Non-streaming synthesis: returns base64 audio in JSON. We default to mp3
+    // so the renderer can play it directly via a data: URI.
+    const response = await axios.post(
+      "https://api.60db.ai/tts-synthesize",
+      {
+        text: text.slice(0, 5000),
+        voice_id: config.sixtydb_voice_id || undefined,
+        output_format: "mp3",
+        speed: 1,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${config.sixtydb_api_key}`,
+          "Content-Type": "application/json",
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      }
+    );
+
+    const data = response.data || {};
+    if (!data.audio_base64) {
+      throw new Error(data.message || "60db returned no audio");
+    }
+    return {
+      success: true,
+      audio_base64: data.audio_base64,
+      output_format: data.output_format || "mp3",
+    };
+  } catch (error: any) {
+    const message = axios.isAxiosError(error)
+      ? error.response
+        ? `60db TTS error: ${error.response.status} ${error.response.statusText}`
+        : error.message
+      : error.message || "Unknown error";
+    return { success: false, error: message };
+  }
+});
+
+ipcMain.handle("get-60db-voices", async (event, config) => {
+  try {
+    if (!config.sixtydb_api_key) {
+      throw new Error("60db API key missing");
+    }
+    const response = await axios.get("https://api.60db.ai/myvoices", {
+      headers: { Authorization: `Bearer ${config.sixtydb_api_key}` },
+    });
+    const data = response.data || {};
+    return { success: true, voices: Array.isArray(data.data) ? data.data : [] };
+  } catch (error: any) {
+    const message = axios.isAxiosError(error)
+      ? error.response
+        ? `60db voices error: ${error.response.status} ${error.response.statusText}`
+        : error.message
+      : error.message || "Unknown error";
+    return { success: false, error: message, voices: [] };
   }
 });

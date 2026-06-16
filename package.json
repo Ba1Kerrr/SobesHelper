@@ -17,6 +17,7 @@
     "@reduxjs/toolkit": "^2.2.7",
     "@types/node-fetch": "^2.6.11",
     "@types/react-router-dom": "^5.3.3",
+    "@types/ws": "^8.18.1",
     "axios": "^1.7.7",
     "cross-fetch": "^4.0.0",
     "daisyui": "^4.12.10",
@@ -37,7 +38,8 @@
     "react-router-dom": "^6.26.2",
     "react-syntax-highlighter": "^15.5.0",
     "sharp": "^0.33.5",
-    "tailwindcss": "^3.4.11"
+    "tailwindcss": "^3.4.11",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.4.0",

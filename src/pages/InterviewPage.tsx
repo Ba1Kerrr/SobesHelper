@@ -35,7 +35,47 @@ const InterviewPage: React.FC = () => {
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const [processor, setProcessor] = useState<ScriptProcessorNode | null>(null);
   const [autoSubmitTimer, setAutoSubmitTimer] = useState<NodeJS.Timeout | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const aiResponseRef = useRef<HTMLDivElement>(null);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const speakText = useCallback(async (text: string) => {
+    const trimmed = (text || "").trim();
+    if (!trimmed) return;
+    try {
+      const config = await window.electronAPI.getConfig();
+      if (!config.sixtydb_api_key) {
+        setError("60db API key not configured. Please add it in Settings to use Text-to-Speech.");
+        return;
+      }
+      setIsSpeaking(true);
+      const result = await window.electronAPI.speak60db(trimmed, config);
+      if (!result.success || !result.audio_base64) {
+        throw new Error(result.error || "Failed to synthesize speech");
+      }
+      // Stop any in-flight playback before starting the new clip.
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+      }
+      const mime = result.output_format === "wav" ? "audio/wav" : result.output_format === "ogg" ? "audio/ogg" : "audio/mpeg";
+      const audio = new Audio(`data:${mime};base64,${result.audio_base64}`);
+      ttsAudioRef.current = audio;
+      audio.onended = () => setIsSpeaking(false);
+      audio.onerror = () => setIsSpeaking(false);
+      await audio.play();
+    } catch (err: any) {
+      setIsSpeaking(false);
+      setError(err?.message || "Failed to play Text-to-Speech audio.");
+    }
+  }, [setError]);
+
+  const stopSpeaking = useCallback(() => {
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current = null;
+    }
+    setIsSpeaking(false);
+  }, []);
 
   const markdownStyles = `
     .markdown-body {
@@ -100,6 +140,10 @@ const InterviewPage: React.FC = () => {
       addConversation({ role: "assistant", content: formattedResponse });
       setDisplayedAiResult(prev => prev + (prev ? '\n\n' : '') + formattedResponse);
       setLastProcessedIndex(currentText.length);
+
+      if (config.tts_autoplay && config.sixtydb_api_key) {
+        speakText(formattedResponse);
+      }
     } catch (error) {
       setError('Failed to get response from GPT. Please try again.');
     } finally {
@@ -156,11 +200,11 @@ const InterviewPage: React.FC = () => {
       checkTimer = setTimeout(checkAndSubmit, 1000);
     };
 
-    window.electronAPI.ipcRenderer.on('deepgram-transcript', handleDeepgramTranscript);
+    window.electronAPI.ipcRenderer.on('stt-transcript', handleDeepgramTranscript);
     checkTimer = setTimeout(checkAndSubmit, 1000);
 
     return () => {
-      window.electronAPI.ipcRenderer.removeListener('deepgram-transcript', handleDeepgramTranscript);
+      window.electronAPI.ipcRenderer.removeListener('stt-transcript', handleDeepgramTranscript);
       if (checkTimer) {
         clearTimeout(checkTimer);
       }
@@ -193,8 +237,11 @@ const InterviewPage: React.FC = () => {
       setUserMedia(stream);
 
       const config = await window.electronAPI.getConfig();
-      const result = await window.electronAPI.ipcRenderer.invoke('start-deepgram', {
-        deepgram_key: config.deepgram_api_key
+      const result = await window.electronAPI.ipcRenderer.invoke('start-stt', {
+        stt_provider: config.stt_provider || 'deepgram',
+        deepgram_key: config.deepgram_api_key,
+        sixtydb_key: config.sixtydb_api_key,
+        primaryLanguage: config.primaryLanguage,
       });
       if (!result.success) {
         throw new Error(result.error);
@@ -215,7 +262,7 @@ const InterviewPage: React.FC = () => {
         for (let i = 0; i < inputData.length; i++) {
           audioData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
         }
-        window.electronAPI.ipcRenderer.invoke('send-audio-to-deepgram', audioData.buffer);
+        window.electronAPI.ipcRenderer.invoke('send-audio', audioData.buffer);
       };
 
       setIsRecording(true);
@@ -234,7 +281,7 @@ const InterviewPage: React.FC = () => {
     if (processor) {
       processor.disconnect();
     }
-    window.electronAPI.ipcRenderer.invoke('stop-deepgram');
+    window.electronAPI.ipcRenderer.invoke('stop-stt');
     setIsRecording(false);
     setUserMedia(null);
     setAudioContext(null);
@@ -321,6 +368,13 @@ const InterviewPage: React.FC = () => {
               className="btn btn-primary"
             >
               {isLoading ? "Loading..." : "Ask GPT"}
+            </button>
+            <button
+              onClick={() => (isSpeaking ? stopSpeaking() : speakText(displayedAiResult))}
+              disabled={!displayedAiResult}
+              className="btn btn-secondary"
+            >
+              {isSpeaking ? "Stop" : "🔊 Speak"}
             </button>
             <button onClick={() => {
               setDisplayedAiResult("");
