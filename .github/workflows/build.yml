@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -20,8 +23,21 @@ jobs:
 
       - run: npm run make
 
+      # Kept for debugging a failed/empty make step - the actual download
+      # link for users is the "latest" release below, not this.
       - uses: actions/upload-artifact@v4
         with:
           name: interview-assistant-windows
           path: out/make/**
           if-no-files-found: error
+
+      # Rolling "latest" release so there's always one obvious download
+      # link on the repo's Releases page, instead of digging through a
+      # specific workflow run's Artifacts section.
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          prerelease: true
+          make_latest: true
+          files: out/make/squirrel.windows/x64/*.exe
