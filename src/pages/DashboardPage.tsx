@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { getStats, UsageStats } from "../utils/stats";
 import { InterviewMode } from "../contexts/InterviewContext";
 
-type ActiveView = "dashboard" | "chat" | "settings" | "knowledge" | "notes" | "recordings" | "jobs" | "hotkeys";
+type ActiveView = "dashboard" | "chat" | "settings" | "knowledge" | "notes" | "recordings" | "jobs" | "kanban" | "hotkeys";
 
 interface ModelSlot {
   label: string;
@@ -25,7 +25,8 @@ const MODE_LABELS: Record<InterviewMode, string> = {
 };
 
 const QUICK_LINKS: Array<{ view: ActiveView; icon: string; label: string }> = [
-  { view: "jobs", icon: "💼", label: "Jobs & Kanban" },
+  { view: "jobs", icon: "💼", label: "Jobs" },
+  { view: "kanban", icon: "📋", label: "Kanban" },
   { view: "recordings", icon: "🎬", label: "Recordings" },
   { view: "notes", icon: "📝", label: "Notes" },
   { view: "hotkeys", icon: "⌨️", label: "Hotkeys" },

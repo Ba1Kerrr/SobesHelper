@@ -980,11 +980,16 @@ function createSelectionWindow(): void {
     height: display.bounds.height,
     frame: false,
     transparent: true,
+    // Windows renders a transparent BrowserWindow as solid black until an
+    // explicit alpha backgroundColor is set - without it the window showed
+    // before the renderer painted, covering the whole screen with black.
+    backgroundColor: "#00000000",
     resizable: false,
     movable: false,
     fullscreenable: false,
     skipTaskbar: true,
     hasShadow: false,
+    show: false,
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
       contextIsolation: true,
@@ -997,6 +1002,9 @@ function createSelectionWindow(): void {
   selectionWindow.setContentProtection(true);
   selectionWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   selectionWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY + "#/region-select");
+  selectionWindow.once("ready-to-show", () => {
+    selectionWindow?.show();
+  });
 
   selectionWindow.on("closed", () => {
     selectionWindow = null;

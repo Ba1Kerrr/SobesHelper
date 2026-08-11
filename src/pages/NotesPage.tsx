@@ -65,7 +65,7 @@ const NotesPage: React.FC = () => {
             Use as context
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto text-sm">
+        <div className="flex-1 overflow-y-auto markdown-body bg-base-200 card-surface p-3">
           <ReactMarkdown>{content}</ReactMarkdown>
         </div>
       </div>

@@ -12,6 +12,10 @@ interface KanbanCard {
   link?: string;
   deadline?: string;
   note?: string;
+  createdAt: number;
+  // Set only for cards created by "Sync from hh.ru" - lets re-syncing add
+  // new responses without duplicating cards the user already has.
+  sourceId?: string;
 }
 
 interface KanbanState {
@@ -31,6 +35,31 @@ const DEFAULT_BOARD: KanbanState = {
 
 const genId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+interface Negotiation {
+  id: string;
+  state: string;
+  vacancy_name: string | null;
+  vacancy_url: string | null;
+  employer_name: string | null;
+  created_at: string;
+}
+
+// hh.ru negotiation states aren't a fixed local enum (the app just stores
+// whatever string state.id the API returns) - match by substring so
+// unfamiliar states still land somewhere reasonable instead of erroring.
+const mapStateToColumn = (state: string, columns: KanbanColumn[]): string => {
+  const s = (state || "").toLowerCase();
+  const byId = (id: string) => columns.find((c) => c.id === id)?.id;
+  if (s.includes("invit")) return byId("feedback") || columns[Math.min(2, columns.length - 1)].id;
+  if (s.includes("discard") || s.includes("reject")) return byId("done") || columns[columns.length - 1].id;
+  return byId("waiting") || columns[Math.min(1, columns.length - 1)].id;
+};
+
+const formatDateTime = (value: number | string) => {
+  const date = typeof value === "number" ? new Date(value) : new Date(value);
+  return isNaN(date.getTime()) ? "" : date.toLocaleString([], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+};
+
 const KanbanBoard: React.FC = () => {
   const [board, setBoard] = useState<KanbanState>(DEFAULT_BOARD);
   const [loaded, setLoaded] = useState(false);
@@ -42,6 +71,8 @@ const KanbanBoard: React.FC = () => {
   const [editingCard, setEditingCard] = useState<string | null>(null);
   const [editingColumn, setEditingColumn] = useState<string | null>(null);
   const [columnTitleDraft, setColumnTitleDraft] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -77,6 +108,7 @@ const KanbanBoard: React.FC = () => {
       title: newTitle.trim(),
       link: newLink.trim() || undefined,
       deadline: newDeadline || undefined,
+      createdAt: Date.now(),
     };
     persist({ ...board, cards: [...board.cards, card] });
     setNewTitle("");
@@ -91,6 +123,36 @@ const KanbanBoard: React.FC = () => {
 
   const handleUpdateNote = (id: string, note: string) => {
     persist({ ...board, cards: board.cards.map((c) => (c.id === id ? { ...c, note } : c)) });
+  };
+
+  const handleSyncFromHH = async () => {
+    setSyncing(true);
+    setSyncError("");
+    try {
+      const negotiations: Negotiation[] = (await window.electronAPI.callHHTool("get_negotiations_from_db")) || [];
+      const known = new Set(board.cards.map((c) => c.sourceId).filter(Boolean));
+      const newCards: KanbanCard[] = negotiations
+        .filter((n) => !known.has(n.id))
+        .map((n) => {
+          const createdAt = new Date(n.created_at).getTime();
+          return {
+            id: genId(),
+            sourceId: n.id,
+            columnId: mapStateToColumn(n.state, board.columns),
+            title: n.vacancy_name || n.id,
+            link: n.vacancy_url || undefined,
+            note: n.employer_name || undefined,
+            createdAt: isNaN(createdAt) ? Date.now() : createdAt,
+          };
+        });
+      if (newCards.length) {
+        await persist({ ...board, cards: [...board.cards, ...newCards] });
+      }
+    } catch {
+      setSyncError("Не удалось получить отклики - проверь подключение на вкладке Jobs.");
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const handleAddColumn = () => {
@@ -127,10 +189,16 @@ const KanbanBoard: React.FC = () => {
     <div className="flex flex-col h-full text-sm">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs opacity-60">Kanban - организация поиска работы</span>
-        <button onClick={handleAddColumn} className="btn btn-ghost btn-xs">
-          + Колонка
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={handleSyncFromHH} disabled={syncing} className="btn btn-ghost btn-xs" title="Добавить карточки по откликам с hh.ru">
+            {syncing ? "..." : "🔄 Синхронизировать с hh.ru"}
+          </button>
+          <button onClick={handleAddColumn} className="btn btn-ghost btn-xs">
+            + Колонка
+          </button>
+        </div>
       </div>
+      {syncError && <p className="text-xs text-error mb-2">{syncError}</p>}
       <div className="flex-1 overflow-x-auto">
         <div className="flex gap-2 h-full" style={{ minWidth: "max-content" }}>
           {board.columns.map((col) => (
@@ -192,7 +260,8 @@ const KanbanBoard: React.FC = () => {
                           🔗 открыть вакансию
                         </button>
                       )}
-                      {card.deadline && <div className="text-xs opacity-50">📅 {card.deadline}</div>}
+                      {card.deadline && <div className="text-xs opacity-50">📅 {formatDateTime(card.deadline)}</div>}
+                      {card.createdAt && <div className="text-xs opacity-40">Добавлено {formatDateTime(card.createdAt)}</div>}
                       {editingCard === card.id ? (
                         <textarea
                           autoFocus
@@ -232,7 +301,7 @@ const KanbanBoard: React.FC = () => {
                     onChange={(e) => setNewLink(e.target.value)}
                   />
                   <input
-                    type="date"
+                    type="datetime-local"
                     className="input input-bordered input-xs w-full bg-base-100"
                     value={newDeadline}
                     onChange={(e) => setNewDeadline(e.target.value)}

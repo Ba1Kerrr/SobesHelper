@@ -32,11 +32,26 @@ export const KnowledgeBaseProvider: React.FC<{ children: ReactNode }> = ({ child
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('knowledgeBase', JSON.stringify(knowledgeBase));
+    try {
+      // Attached images (clipboard/file upload) are data: URLs large enough
+      // to blow localStorage's quota - persisting them crashed every
+      // subsequent update with an uncaught QuotaExceededError, which is what
+      // made the attach button itself look broken. Keep images for the
+      // current session only; persist text so restarts don't lose the
+      // resume/notes.
+      const persistable = knowledgeBase.filter((item) => !item.startsWith('data:image'));
+      localStorage.setItem('knowledgeBase', JSON.stringify(persistable));
+    } catch {
+      // Still over quota even after filtering - not fatal, skip this write.
+    }
   }, [knowledgeBase]);
 
   useEffect(() => {
-    localStorage.setItem('conversations', JSON.stringify(conversations));
+    try {
+      localStorage.setItem('conversations', JSON.stringify(conversations));
+    } catch {
+      // best-effort - conversation history persistence isn't critical
+    }
   }, [conversations]);
 
   const addToKnowledgeBase = (content: string) => {

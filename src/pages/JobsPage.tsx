@@ -4,7 +4,6 @@ import ErrorDisplay from "../components/ErrorDisplay";
 import SuperJobPanel from "./SuperJobPanel";
 import ExternalLinkPanel from "./ExternalLinkPanel";
 import FlRuPanel from "./FlRuPanel";
-import KanbanBoard from "./KanbanBoard";
 
 interface Option {
   id: string;
@@ -66,7 +65,7 @@ const EMPLOYMENT_OPTIONS = [
 ];
 
 type JobsTab = "search" | "responses" | "resumes" | "stats";
-type Platform = "hh" | "superjob" | "habr" | "linkedin" | "flru" | "kanban";
+type Platform = "hh" | "superjob" | "habr" | "linkedin" | "flru";
 
 const PLATFORMS: Array<{ id: Platform; label: string }> = [
   { id: "hh", label: "hh.ru" },
@@ -74,7 +73,6 @@ const PLATFORMS: Array<{ id: Platform; label: string }> = [
   { id: "habr", label: "Хабр Карьера" },
   { id: "linkedin", label: "LinkedIn" },
   { id: "flru", label: "FL.ru" },
-  { id: "kanban", label: "📋 Kanban" },
 ];
 
 const buildHabrUrl = (query: string, location: string) => {
@@ -743,8 +741,6 @@ const JobsPage: React.FC = () => {
           <FlRuPanel />
         </div>
       )}
-      {platform === "kanban" && <KanbanBoard />}
-
       {platform === "hh" && (
       <>
       <div className="flex items-center justify-between mb-2 bg-base-200 rounded px-2 py-1.5">

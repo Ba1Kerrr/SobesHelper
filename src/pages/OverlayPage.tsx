@@ -13,6 +13,7 @@ import KnowledgeBase from "./KnowledgeBase";
 import NotesPage from "./NotesPage";
 import RecordingsPage from "./RecordingsPage";
 import JobsPage from "./JobsPage";
+import KanbanBoard from "./KanbanBoard";
 import HotkeysPage from "./HotkeysPage";
 import DashboardPage from "./DashboardPage";
 import QuickSetupPage from "./QuickSetupPage";
@@ -69,9 +70,25 @@ const markdownStyles = `
   .markdown-body p:last-child { margin-bottom: 0; }
   .markdown-body code { padding: 0.15em 0.4em; font-size: 85%; background-color: rgba(255,255,255,0.08); border-radius: 3px; }
   .markdown-body pre { padding: 10px; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #12131a; border-radius: 6px; }
+  .markdown-body pre code { padding: 0; background: none; }
+  .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { font-weight: 600; margin: 16px 0 8px; line-height: 1.3; }
+  .markdown-body h1:first-child, .markdown-body h2:first-child, .markdown-body h3:first-child { margin-top: 0; }
+  .markdown-body h1 { font-size: 1.4em; }
+  .markdown-body h2 { font-size: 1.2em; }
+  .markdown-body h3 { font-size: 1.05em; }
+  .markdown-body h4 { font-size: 1em; opacity: 0.85; }
+  .markdown-body ul, .markdown-body ol { margin: 0 0 8px; padding-left: 1.4em; }
+  .markdown-body li { margin: 2px 0; }
+  .markdown-body a { color: #31E6E0; text-decoration: underline; }
+  .markdown-body strong { font-weight: 600; }
+  .markdown-body blockquote { margin: 8px 0; padding: 4px 12px; border-left: 3px solid #7A5CFF; opacity: 0.85; }
+  .markdown-body hr { border: none; border-top: 1px solid #2C2F3A; margin: 12px 0; }
+  .markdown-body table { border-collapse: collapse; margin: 8px 0; font-size: 0.95em; }
+  .markdown-body th, .markdown-body td { border: 1px solid #2C2F3A; padding: 4px 8px; }
+  .markdown-body img { max-width: 100%; border-radius: 6px; }
 `;
 
-type ActiveView = "dashboard" | "chat" | "settings" | "knowledge" | "notes" | "recordings" | "jobs" | "hotkeys";
+type ActiveView = "dashboard" | "chat" | "settings" | "knowledge" | "notes" | "recordings" | "jobs" | "kanban" | "hotkeys";
 
 const VIEW_TITLES: Record<Exclude<ActiveView, "chat" | "dashboard">, string> = {
   settings: "Settings",
@@ -79,6 +96,7 @@ const VIEW_TITLES: Record<Exclude<ActiveView, "chat" | "dashboard">, string> = {
   notes: "Obsidian Notes",
   recordings: "Recordings",
   jobs: "Jobs",
+  kanban: "Kanban",
   hotkeys: "Hotkeys",
 };
 
@@ -794,6 +812,9 @@ const OverlayPage: React.FC = () => {
               <button onClick={() => setActiveView("jobs")} className="btn btn-ghost btn-xs" title="Jobs">
                 💼
               </button>
+              <button onClick={() => setActiveView("kanban")} className="btn btn-ghost btn-xs" title="Kanban">
+                📋
+              </button>
               <button onClick={() => setActiveView("recordings")} className="btn btn-ghost btn-xs" title="Recordings">
                 🎬
               </button>
@@ -861,6 +882,8 @@ const OverlayPage: React.FC = () => {
           <JobsPage />
         </div>
       )}
+
+      {activeView === "kanban" && <KanbanBoard />}
 
       {(activeView === "chat" || activeView === "dashboard") && !isConfigured && (
         <div className="flex-1 overflow-y-auto">
