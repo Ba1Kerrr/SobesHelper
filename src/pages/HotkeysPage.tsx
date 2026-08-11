@@ -41,7 +41,7 @@ const HotkeysPage: React.FC = () => {
       {loading && <p className="opacity-50">Loading...</p>}
       <div className="flex-1 overflow-y-auto space-y-2">
         {hotkeys.map((hk) => (
-          <div key={hk.id} className="bg-base-200 rounded p-2">
+          <div key={hk.id} className="card-surface bg-base-200 p-2">
             <div className="flex items-center justify-between gap-2">
               <span className="font-semibold">{hk.label}</span>
               <span

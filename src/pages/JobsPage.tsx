@@ -909,7 +909,7 @@ const JobsPage: React.FC = () => {
               {advancedOpen ? "▾" : "▸"} Advanced filters
             </button>
             {advancedOpen && (
-              <div className="space-y-2 bg-base-200 rounded p-2">
+              <div className="space-y-2 card-surface bg-base-200 p-2">
                 <div className="grid grid-cols-2 gap-2">
                   <select className={selectClass} value={industryId} onChange={(e) => setIndustryId(e.target.value)}>
                     <option value="">Any industry</option>
@@ -1189,7 +1189,7 @@ const JobsPage: React.FC = () => {
             </button>
             {negotiations.length === 0 && <p className="text-xs opacity-50">No responses yet.</p>}
             {negotiations.map((n) => (
-              <div key={n.id} className="bg-base-200 rounded p-2">
+              <div key={n.id} className="card-surface bg-base-200 p-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate font-medium">{n.vacancy_name || n.vacancy_id}</span>
                   <span className="badge badge-xs">{n.state}</span>
@@ -1325,7 +1325,7 @@ const JobsPage: React.FC = () => {
             </button>
             <p className="text-xs opacity-50">Bumps every publishable resume back to the top of recruiter search results.</p>
 
-            <div className="bg-base-200 rounded p-2">
+            <div className="card-surface bg-base-200 p-2">
               <div className="text-xs opacity-60 mb-1">🤖 Automation</div>
               <div className="flex items-center gap-2 mb-1">
                 <input
@@ -1354,7 +1354,7 @@ const JobsPage: React.FC = () => {
 
             {resumes.length === 0 && <p className="text-xs opacity-50">No resumes found. Sign in first.</p>}
             {resumes.map((r) => (
-              <div key={r.id} className="bg-base-200 rounded p-2">
+              <div key={r.id} className="card-surface bg-base-200 p-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="font-medium truncate">{r.title || r.id}</div>
                   <button
@@ -1411,16 +1411,16 @@ const JobsPage: React.FC = () => {
             {!statsLoading && stats && (
               <>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-base-200 rounded p-2">
+                  <div className="card-surface bg-base-200 p-2">
                     <div className="opacity-60 text-xs">Total responses</div>
                     <div className="text-lg font-semibold">{stats.total_negotiations ?? 0}</div>
                   </div>
-                  <div className="bg-base-200 rounded p-2">
+                  <div className="card-surface bg-base-200 p-2">
                     <div className="opacity-60 text-xs">Total skipped</div>
                     <div className="text-lg font-semibold">{stats.total_skipped ?? 0}</div>
                   </div>
                 </div>
-                <div className="bg-base-200 rounded p-2">
+                <div className="card-surface bg-base-200 p-2">
                   <div className="opacity-60 text-xs mb-1">By state</div>
                   {topEntries(stats.by_state, 10).map(([state, count]) => (
                     <div key={state} className="flex justify-between text-xs py-0.5">
@@ -1430,7 +1430,7 @@ const JobsPage: React.FC = () => {
                   ))}
                   {topEntries(stats.by_state, 10).length === 0 && <p className="text-xs opacity-50">No data yet.</p>}
                 </div>
-                <div className="bg-base-200 rounded p-2">
+                <div className="card-surface bg-base-200 p-2">
                   <div className="opacity-60 text-xs mb-1">Skipped by reason</div>
                   {topEntries(stats.skipped_by_reason, 10).map(([reason, count]) => (
                     <div key={reason} className="flex justify-between text-xs py-0.5">
@@ -1440,7 +1440,7 @@ const JobsPage: React.FC = () => {
                   ))}
                   {topEntries(stats.skipped_by_reason, 10).length === 0 && <p className="text-xs opacity-50">No data yet.</p>}
                 </div>
-                <div className="bg-base-200 rounded p-2">
+                <div className="card-surface bg-base-200 p-2">
                   <div className="opacity-60 text-xs mb-1">Last 30 days (responses)</div>
                   {Object.entries(stats.daily_negotiations || {})
                     .sort((a, b) => (a[0] < b[0] ? 1 : -1))

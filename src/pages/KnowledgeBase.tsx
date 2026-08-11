@@ -83,7 +83,7 @@ const KnowledgeBase: React.FC = () => {
           <p className="text-sm opacity-50">Nothing uploaded yet.</p>
         )}
         {knowledgeBase.map((item, index) => (
-          <div key={index} className="flex items-center gap-2 bg-base-200 rounded px-2 py-1 text-sm">
+          <div key={index} className="card-surface flex items-center gap-2 bg-base-200 px-2 py-1.5 text-sm">
             {item.startsWith('data:image') ? <FaImage className="opacity-60" /> : <FaFile className="opacity-60" />}
             <span className="flex-1 truncate">{summarize(item)}</span>
             <button onClick={() => removeItem(index)} className="btn btn-xs btn-circle btn-ghost">

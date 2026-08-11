@@ -476,7 +476,7 @@ const Settings: React.FC = () => {
       </p>
       <div className="space-y-2 mb-4">
         {modelSlots.map((slot, i) => (
-          <details key={i} className="bg-base-200 rounded p-2">
+          <details key={i} className="card-surface bg-base-200 p-2">
             <summary className="cursor-pointer text-sm font-medium flex items-center gap-2">
               <span className="badge badge-sm">Ctrl+Alt+{i + 1}</span>
               <input
@@ -925,27 +925,27 @@ const Settings: React.FC = () => {
       <>
       <h2 className="text-lg font-bold mt-6 mb-2">Usage Stats</h2>
       <div className="grid grid-cols-2 gap-2 mb-4 text-sm">
-        <div className="bg-base-200 rounded p-2">
+        <div className="card-surface bg-base-200 p-2">
           <div className="opacity-60">Questions answered</div>
           <div className="text-lg font-semibold">{stats.questionsAnswered}</div>
         </div>
-        <div className="bg-base-200 rounded p-2">
+        <div className="card-surface bg-base-200 p-2">
           <div className="opacity-60">Avg. time to first word</div>
           <div className="text-lg font-semibold">
             {stats.firstChunkCount > 0 ? `${(stats.totalFirstChunkMs / stats.firstChunkCount / 1000).toFixed(1)}s` : '-'}
           </div>
         </div>
-        <div className="bg-base-200 rounded p-2">
+        <div className="card-surface bg-base-200 p-2">
           <div className="opacity-60">Avg. full response time</div>
           <div className="text-lg font-semibold">
             {stats.questionsAnswered > 0 ? `${(stats.totalResponseMs / stats.questionsAnswered / 1000).toFixed(1)}s` : '-'}
           </div>
         </div>
-        <div className="bg-base-200 rounded p-2">
+        <div className="card-surface bg-base-200 p-2">
           <div className="opacity-60">Listening sessions</div>
           <div className="text-lg font-semibold">{stats.sessionsStarted}</div>
         </div>
-        <div className="bg-base-200 rounded p-2">
+        <div className="card-surface bg-base-200 p-2">
           <div className="opacity-60">Recordings saved</div>
           <div className="text-lg font-semibold">{recordingsCount}</div>
         </div>

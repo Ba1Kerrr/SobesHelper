@@ -6,6 +6,18 @@ declare global {
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import type { IconType } from "react-icons";
+import {
+  FiHome,
+  FiMessageCircle,
+  FiBriefcase,
+  FiTrello,
+  FiFilm,
+  FiFileText,
+  FiBookOpen,
+  FiCommand,
+  FiSettings,
+} from "react-icons/fi";
 import Timer from "../components/Timer";
 import ErrorDisplay from "../components/ErrorDisplay";
 import Settings from "./Settings";
@@ -89,6 +101,17 @@ const markdownStyles = `
 `;
 
 type ActiveView = "dashboard" | "chat" | "settings" | "knowledge" | "notes" | "recordings" | "jobs" | "kanban" | "hotkeys";
+
+const NAV_ITEMS: Array<{ view: Exclude<ActiveView, "settings">; icon: IconType; label: string }> = [
+  { view: "dashboard", icon: FiHome, label: "Dashboard" },
+  { view: "chat", icon: FiMessageCircle, label: "Chat" },
+  { view: "jobs", icon: FiBriefcase, label: "Jobs" },
+  { view: "kanban", icon: FiTrello, label: "Kanban" },
+  { view: "recordings", icon: FiFilm, label: "Recordings" },
+  { view: "notes", icon: FiFileText, label: "Notes" },
+  { view: "knowledge", icon: FiBookOpen, label: "Knowledge" },
+  { view: "hotkeys", icon: FiCommand, label: "Hotkeys" },
+];
 
 const VIEW_TITLES: Record<Exclude<ActiveView, "chat" | "dashboard">, string> = {
   settings: "Settings",
@@ -758,10 +781,10 @@ const OverlayPage: React.FC = () => {
         style={{ borderColor: COLORS.border }}
       >
         {activeView === "chat" || activeView === "dashboard" ? (
-          <>
+          <div className="no-drag-region flex items-center gap-2">
             <button
               onClick={cycleMode}
-              className="no-drag-region neon-glow px-2.5 py-1 rounded-full text-xs font-semibold"
+              className="no-drag-region neon-glow interactive px-2.5 py-1 rounded-full text-xs font-semibold"
               style={{ background: MODE_COLORS[mode], color: "#14151B" }}
               title="Click to cycle mode (Ctrl+Shift+M)"
             >
@@ -770,7 +793,7 @@ const OverlayPage: React.FC = () => {
             <div className="no-drag-region relative">
               <button
                 onClick={toggleVacancyMenu}
-                className="btn btn-ghost btn-xs max-w-[110px] truncate"
+                className="btn btn-ghost btn-xs max-w-[160px] truncate"
                 title={activeVacancy ? `Interview context: ${activeVacancy.vacancy_name}` : "Attach a vacancy as interview context"}
               >
                 📌{activeVacancy ? ` ${activeVacancy.vacancy_name}` : ""}
@@ -805,36 +828,10 @@ const OverlayPage: React.FC = () => {
                 </div>
               )}
             </div>
-            <div className="no-drag-region flex items-center gap-1">
-              <button onClick={() => setActiveView("dashboard")} className="btn btn-ghost btn-xs" title="Dashboard">
-                🏠
-              </button>
-              <button onClick={() => setActiveView("jobs")} className="btn btn-ghost btn-xs" title="Jobs">
-                💼
-              </button>
-              <button onClick={() => setActiveView("kanban")} className="btn btn-ghost btn-xs" title="Kanban">
-                📋
-              </button>
-              <button onClick={() => setActiveView("recordings")} className="btn btn-ghost btn-xs" title="Recordings">
-                🎬
-              </button>
-              <button onClick={() => setActiveView("notes")} className="btn btn-ghost btn-xs" title="Obsidian Notes">
-                📝
-              </button>
-              <button onClick={() => setActiveView("knowledge")} className="btn btn-ghost btn-xs" title="Knowledge Base">
-                📚
-              </button>
-              <button onClick={() => setActiveView("hotkeys")} className="btn btn-ghost btn-xs" title="Hotkeys">
-                ⌨️
-              </button>
-              <button onClick={() => setActiveView("settings")} className="btn btn-ghost btn-xs" title="Settings">
-                ⚙️
-              </button>
-            </div>
-          </>
+          </div>
         ) : (
           <>
-            <button onClick={() => setActiveView("chat")} className="no-drag-region btn btn-ghost btn-xs">
+            <button onClick={() => setActiveView("dashboard")} className="no-drag-region btn btn-ghost btn-xs">
               ← Back
             </button>
             <span className="font-semibold text-sm">{VIEW_TITLES[activeView]}</span>
@@ -843,6 +840,41 @@ const OverlayPage: React.FC = () => {
         )}
       </div>
 
+      <div className="flex flex-1 min-h-0">
+        <nav
+          className="no-drag-region flex flex-col items-center gap-1 py-2 flex-shrink-0 border-r"
+          style={{ width: 52, background: COLORS.surface, borderColor: COLORS.border }}
+        >
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const active = activeView === item.view;
+            return (
+              <button
+                key={item.view}
+                onClick={() => setActiveView(item.view)}
+                title={item.label}
+                className="interactive w-9 h-9 rounded-lg flex items-center justify-center"
+                style={{ background: active ? accentColor : "transparent", color: active ? "#14151B" : COLORS.muted }}
+              >
+                <Icon size={16} />
+              </button>
+            );
+          })}
+          <div className="flex-1" />
+          <button
+            onClick={() => setActiveView("settings")}
+            title="Settings"
+            className="interactive w-9 h-9 rounded-lg flex items-center justify-center"
+            style={{
+              background: activeView === "settings" ? accentColor : "transparent",
+              color: activeView === "settings" ? "#14151B" : COLORS.muted,
+            }}
+          >
+            <FiSettings size={16} />
+          </button>
+        </nav>
+
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
       <div className="px-2 pt-1 flex-shrink-0">
         <ErrorDisplay error={error} onClose={clearError} />
       </div>
@@ -883,7 +915,11 @@ const OverlayPage: React.FC = () => {
         </div>
       )}
 
-      {activeView === "kanban" && <KanbanBoard />}
+      {activeView === "kanban" && (
+        <div className="flex-1 overflow-hidden p-3 flex flex-col">
+          <KanbanBoard />
+        </div>
+      )}
 
       {(activeView === "chat" || activeView === "dashboard") && !isConfigured && (
         <div className="flex-1 overflow-y-auto">
@@ -1137,6 +1173,8 @@ const OverlayPage: React.FC = () => {
           </div>
         </>
       )}
+        </div>
+      </div>
     </div>
   );
 };

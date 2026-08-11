@@ -56,7 +56,7 @@ const FlRuPanel: React.FC = () => {
       {!loading && filtered.length === 0 && !error && <p className="text-xs opacity-50">No projects found.</p>}
       <div className="space-y-2">
         {filtered.map((p) => (
-          <div key={p.link} className="bg-base-200 rounded p-2">
+          <div key={p.link} className="card-surface bg-base-200 p-2">
             <div className="font-medium truncate">{p.title}</div>
             <p className="text-xs opacity-70 mt-0.5 line-clamp-2">{p.description}</p>
             <div className="flex items-center justify-between mt-1">

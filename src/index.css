@@ -56,7 +56,41 @@ body {
 
 /* One radius scale used everywhere instead of ad-hoc rounded-md/rounded-lg
    mixed per component: sm for inline pills/badges, md for cards/inputs, full
-   for circular controls (kept as Tailwind's own rounded-full). */
+   for circular controls (kept as Tailwind's own rounded-full). Additive on
+   top of an existing bg-base-* class, not a replacement for one. */
 .card-surface {
   border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.24), 0 6px 16px rgba(0, 0, 0, 0.16);
+}
+
+/* Applied to anything clickable that isn't already a daisyUI .btn (which
+   gets its own hover/active handling) - the custom inline-styled buttons
+   (nav rail, dashboard CTA, kanban cards) were completely static before. */
+.interactive {
+  transition: transform 0.12s ease, filter 0.12s ease, background-color 0.12s ease;
+  cursor: pointer;
+}
+.interactive:hover {
+  filter: brightness(1.12);
+}
+.interactive:active {
+  transform: scale(0.97);
+}
+
+/* Chromium's default scrollbar is disproportionately chunky in a window
+   this size, where most of the UI is scrollable panels. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
 }

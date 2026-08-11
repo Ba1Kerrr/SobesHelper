@@ -144,7 +144,7 @@ const SuperJobPanel: React.FC = () => {
       {total > 0 && <p className="text-xs opacity-50">{total} vacancies found</p>}
       <div className="space-y-2">
         {results.map((v) => (
-          <div key={v.id} className="bg-base-200 rounded p-2">
+          <div key={v.id} className="card-surface bg-base-200 p-2">
             <div className="font-medium truncate">{v.profession}</div>
             <div className="text-xs opacity-70 truncate">
               {v.firm_name} {v.town?.title ? `· ${v.town.title}` : ""}

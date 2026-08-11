@@ -104,10 +104,10 @@ const createOverlayWindow = (): void => {
   overlayClickThrough = !!savedConfig.overlay_click_through_always_on;
 
   overlayWindow = new BrowserWindow({
-    width: savedBounds?.width || 440,
-    height: savedBounds?.height || 680,
-    minWidth: 360,
-    minHeight: 480,
+    width: savedBounds?.width || 520,
+    height: savedBounds?.height || 780,
+    minWidth: 400,
+    minHeight: 520,
     x: savedBounds?.x,
     y: savedBounds?.y,
     frame: false,

@@ -92,7 +92,7 @@ const RecordingsPage: React.FC = () => {
           {searching && <p className="text-sm opacity-50">Searching...</p>}
           {!searching && searchResults.length === 0 && <p className="text-sm opacity-50">No matches.</p>}
           {searchResults.map((r, i) => (
-            <div key={i} className="bg-base-200 rounded p-2">
+            <div key={i} className="card-surface bg-base-200 p-2">
               <div className="flex items-center justify-between gap-2 mb-1">
                 <span className="text-sm font-semibold truncate">{r.meetingName}</span>
                 <button onClick={() => window.electronAPI.openPath(r.filePath)} className="btn btn-ghost btn-xs flex-shrink-0">
@@ -107,7 +107,7 @@ const RecordingsPage: React.FC = () => {
       ) : (
         <div className="flex-1 overflow-y-auto space-y-3">
           {meetings.map((meeting) => (
-            <div key={meeting.name} className="bg-base-200 rounded p-2">
+            <div key={meeting.name} className="card-surface bg-base-200 p-2">
               <p className="text-sm font-semibold mb-1 truncate">{meeting.name}</p>
               {meeting.files.map((file) => (
                 <div key={file.path} className="mb-1.5">

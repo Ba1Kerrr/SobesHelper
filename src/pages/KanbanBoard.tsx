@@ -204,7 +204,7 @@ const KanbanBoard: React.FC = () => {
           {board.columns.map((col) => (
             <div
               key={col.id}
-              className="bg-base-200 rounded p-2 flex flex-col"
+              className="card-surface bg-base-200 p-2 flex flex-col"
               style={{ width: 220 }}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => handleDrop(col.id)}
@@ -244,7 +244,7 @@ const KanbanBoard: React.FC = () => {
                       key={card.id}
                       draggable
                       onDragStart={() => setDraggingId(card.id)}
-                      className="bg-base-100 rounded p-2 cursor-move shadow-sm"
+                      className="card-surface interactive bg-base-100 p-2 cursor-move"
                     >
                       <div className="flex items-start justify-between gap-1">
                         <span className="text-xs font-medium">{card.title}</span>
