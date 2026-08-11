@@ -12,8 +12,6 @@ interface KnowledgeBaseContextType {
   conversations: Conversation[];
   addConversation: (conversation: Conversation) => void;
   clearConversations: () => void;
-  displayedAiResult: string;
-  setDisplayedAiResult: React.Dispatch<React.SetStateAction<string>>;
 }
 
 const KnowledgeBaseContext = createContext<KnowledgeBaseContextType | undefined>(undefined);
@@ -21,7 +19,6 @@ const KnowledgeBaseContext = createContext<KnowledgeBaseContextType | undefined>
 export const KnowledgeBaseProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [knowledgeBase, setKnowledgeBase] = useState<string[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [displayedAiResult, setDisplayedAiResult] = useState("");
 
   useEffect(() => {
     const savedKnowledgeBase = localStorage.getItem('knowledgeBase');
@@ -63,8 +60,6 @@ export const KnowledgeBaseProvider: React.FC<{ children: ReactNode }> = ({ child
         conversations,
         addConversation,
         clearConversations,
-        displayedAiResult,
-        setDisplayedAiResult,
       }}
     >
       {children}

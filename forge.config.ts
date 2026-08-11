@@ -15,18 +15,17 @@ import { rendererConfig } from './webpack.renderer.config';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
-    icon: './src/assets/icon', 
-    name: 'Interview Assistant'
+    icon: './src/assets/icon',
+    name: 'Interview Assistant',
+    // Ships alongside the asar (not inside it) - the vendored hh_applicant_tool
+    // package is run by a real Python interpreter via pythonBridge.ts, not bundled.
+    extraResource: ['./python'],
   },
   rebuildConfig: {},
   makers: [
-    new MakerZIP({}, ['darwin', 'win32']),
+    new MakerSquirrel({}),
+    new MakerZIP({}, ['darwin']),
     new MakerDMG({}),
-    {
-      name: '@electron-forge/maker-zip',
-      config: {},
-      platforms: ['win32']
-    }
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),

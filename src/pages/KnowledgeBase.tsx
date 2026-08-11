@@ -1,265 +1,97 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useKnowledgeBase } from '../contexts/KnowledgeBaseContext';
 import { useError } from '../contexts/ErrorContext';
 import ErrorDisplay from '../components/ErrorDisplay';
-import OpenAI from 'openai';
-import ReactMarkdown from 'react-markdown';
 import { FaFile, FaImage } from 'react-icons/fa';
 
-interface UploadedFile extends File {
-  pdfText?: string;
-  error?: string;
-}
+const summarize = (content: string): string => {
+  if (content.startsWith('data:image')) return 'Image';
+  return content.length > 80 ? content.slice(0, 80) + '...' : content;
+};
 
 const KnowledgeBase: React.FC = () => {
-  const { 
-    knowledgeBase, 
-    addToKnowledgeBase, 
-    conversations, 
-    addConversation, 
-    clearConversations,
-    displayedAiResult,
-    setDisplayedAiResult
-  } = useKnowledgeBase();
+  const { knowledgeBase, addToKnowledgeBase, setKnowledgeBase } = useKnowledgeBase();
   const { error, setError, clearError } = useError();
-  const [chatInput, setChatInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-
-  const simulateTyping = (text: string) => {
-    let i = 0;
-    setDisplayedAiResult('');  
-    const interval = setInterval(() => {
-      if (i <= text.length) {
-        setDisplayedAiResult(text.slice(0, i));
-        i++;
-      } else {
-        clearInterval(interval);
-        setTimeout(() => {
-          setDisplayedAiResult((prev) => prev + '\n\n');
-        }, 500);
-      }
-    }, 10);
-  };
-
-  const handleChatSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim() && uploadedFiles.length === 0) return;
-
-    try {
-      setIsLoading(true);
-      let fileContents: string[] = [];
-
-      if (uploadedFiles.length > 0) {
-        for (const file of uploadedFiles) {
-          if ('pdfText' in file) {
-            fileContents.push(file.pdfText);
-          } else if (file.type.startsWith('image/')) {
-            const reader = new FileReader();
-            const content = await new Promise<string>((resolve) => {
-              reader.onload = (e) => resolve(e.target?.result as string);
-              reader.readAsDataURL(file);
-            });
-            fileContents.push(content);
-          } else {
-            const reader = new FileReader();
-            const content = await new Promise<string>((resolve) => {
-              reader.onload = (e) => resolve(e.target?.result as string);
-              reader.readAsText(file);
-            });
-            fileContents.push(content);
-          }
-        }
-      }
-
-      const userMessage = chatInput.trim() 
-        ? (uploadedFiles.length > 0
-          ? `[Files: ${uploadedFiles.map(f => f.name).join(', ')}] ${chatInput}` 
-          : chatInput)
-        : (uploadedFiles.length > 0
-          ? `Please analyze the attached files: ${uploadedFiles.map(f => f.name).join(', ')}` 
-          : "");
-      addConversation({ role: "user", content: userMessage });
-
-      const config = await window.electronAPI.getConfig();
-      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-        { role: "system", content: "" },
-        ...knowledgeBase.map(item => {
-          if (item.startsWith('data:image')) {
-            return {
-              role: "user",
-              content: [{ type: "image_url", image_url: { url: item } } as const]
-            } as OpenAI.Chat.ChatCompletionUserMessageParam;
-          }
-          return { role: "user", content: item } as OpenAI.Chat.ChatCompletionUserMessageParam;
-        }),
-        ...conversations.map(conv => ({
-          role: conv.role,
-          content: conv.content
-        }) as OpenAI.Chat.ChatCompletionMessageParam),
-      ];
-
-      if (fileContents.length > 0) {
-        for (const content of fileContents) {
-          if (content.startsWith('data:image')) {
-            messages.push({
-              role: "user",
-              content: [{ type: "image_url", image_url: { url: content } } as const]
-            } as OpenAI.Chat.ChatCompletionUserMessageParam);
-          } else {
-            messages.push({ role: "user", content: content } as OpenAI.Chat.ChatCompletionUserMessageParam);
-          }
-        }
-      }
-
-      messages.push({ role: "user", content: userMessage } as OpenAI.Chat.ChatCompletionUserMessageParam);
-
-      setChatInput("");
-      setUploadedFiles([]);
-
-      const response = await window.electronAPI.callOpenAI({
-        config: config,
-        messages: messages
-      });
-
-      if ('error' in response) {
-        throw new Error(response.error);
-      }
-
-      if (typeof response.content !== 'string') {
-        throw new Error('Unexpected API response structure');
-      }
-
-      addConversation({ role: "assistant", content: response.content });
-      simulateTyping(response.content);
-    } catch (error) {
-      setError('Failed to get response from GPT. Please try again.');
-      console.error('Detailed error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const [uploading, setUploading] = useState(false);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (files) {
-      const newFiles = Array.from(files);
-      if (uploadedFiles.length + newFiles.length > 3) {
-        setError('You can only upload up to 3 files.');
-        return;
-      }
-      console.log('Processing files:', newFiles.map(f => ({ name: f.name, type: f.type })));
-      const processedFiles = await Promise.all(newFiles.map(async (file) => {
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
         if (file.type === 'application/pdf') {
           const arrayBuffer = await file.arrayBuffer();
-          console.log('Calling parsePDF for file:', file.name);
           const result = await window.electronAPI.parsePDF(arrayBuffer);
-          console.log('parsePDF response received:', result);
           if (result.error) {
-            console.error('Error parsing PDF:', result.error);
-            return { ...file, error: result.error } as UploadedFile;
+            setError(`Failed to parse ${file.name}: ${result.error}`);
+            continue;
           }
-          return { ...file, pdfText: result.text, name: file.name, type: file.type } as UploadedFile;
+          addToKnowledgeBase(result.text);
+        } else if (file.type.startsWith('image/')) {
+          const dataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.readAsDataURL(file);
+          });
+          addToKnowledgeBase(dataUrl);
+        } else {
+          const text = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.readAsText(file);
+          });
+          addToKnowledgeBase(text);
         }
-        return file as UploadedFile;
-      }));
-      console.log('Processed files:', processedFiles);
-      setUploadedFiles(prevFiles => [...prevFiles, ...processedFiles]);
+      }
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
+  const removeItem = (index: number) => {
+    setKnowledgeBase(knowledgeBase.filter((_, i) => i !== index));
+  };
+
   return (
-    <div className="flex flex-col h-[calc(100vh-2.5rem)] p-2 max-w-4xl mx-auto">
+    <div className="flex flex-col h-full">
       <ErrorDisplay error={error} onClose={clearError} />
-      <h1 className="text-xl font-bold mb-1">Knowledge Base Chat</h1>
-      <div className="flex-1 overflow-auto mb-4 border-2 border-gray-300 rounded-lg p-4 bg-base-100 shadow-md">
-        {conversations.map((conv, index) => (
-          <div key={index} className={`mb-2 ${conv.role === 'user' ? 'text-right' : 'text-left'}`}>
-            <div className={`inline-block p-2 rounded-lg ${
-              conv.role === 'user' ? 'bg-primary text-primary-content' : 'bg-secondary text-secondary-content'
-            }`}>
-              {conv.role === 'user' ? (
-                <span>
-                  {conv.content.startsWith('[Files:') ? (
-                    <>
-                      {conv.content.includes('image') ? <FaImage className="inline mr-1" /> : <FaFile className="inline mr-1" />}
-                      {conv.content}
-                    </>
-                  ) : (
-                    conv.content
-                  )}
-                </span>
-              ) : (
-                index === conversations.length - 1 ? (
-                  <ReactMarkdown>{displayedAiResult}</ReactMarkdown>
-                ) : (
-                  <ReactMarkdown>{conv.content}</ReactMarkdown>
-                )
-              )}
-            </div>
+      <p className="text-sm opacity-70 mb-2">
+        Reference material (resume, job description, notes) included as context on every question.
+      </p>
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        className="btn btn-primary btn-sm mb-2"
+        disabled={uploading}
+      >
+        {uploading ? 'Uploading...' : 'Upload File'}
+      </button>
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileUpload}
+        className="hidden"
+        accept=".pdf,.txt,.md,.jpg,.jpeg,.png"
+        multiple
+      />
+      <div className="flex-1 overflow-auto space-y-1">
+        {knowledgeBase.length === 0 && (
+          <p className="text-sm opacity-50">Nothing uploaded yet.</p>
+        )}
+        {knowledgeBase.map((item, index) => (
+          <div key={index} className="flex items-center gap-2 bg-base-200 rounded px-2 py-1 text-sm">
+            {item.startsWith('data:image') ? <FaImage className="opacity-60" /> : <FaFile className="opacity-60" />}
+            <span className="flex-1 truncate">{summarize(item)}</span>
+            <button onClick={() => removeItem(index)} className="btn btn-xs btn-circle btn-ghost">
+              x
+            </button>
           </div>
         ))}
       </div>
-      <form onSubmit={handleChatSubmit} className="flex mb-4">
-        <button 
-          type="button" 
-          onClick={() => fileInputRef.current?.click()} 
-          className="btn btn-accent mr-2"
-        >
-          Upload
-        </button>
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileUpload}
-          className="hidden"
-          accept=".pdf,.jpg,.jpeg,.png"
-          multiple
-        />
-        <input
-          type="text"
-          value={chatInput}
-          onChange={(e) => setChatInput(e.target.value)}
-          className="input input-bordered flex-grow mr-2"
-          placeholder="Type your message..."
-        />
-        <button type="submit" className="btn btn-primary" disabled={isLoading}>
-          Send
-        </button>
-      </form>
-      <button onClick={() => {
-        clearConversations();
-        setDisplayedAiResult("");
-      }} className="btn btn-secondary w-full mb-4">
-        Clear Chat
-      </button>
-      {uploadedFiles.length > 0 && (
-        <div className="flex flex-wrap items-center mb-1 p-2 bg-base-200 rounded-lg">
-          {uploadedFiles.map((file, index) => (
-            <div key={index} className="flex items-center mr-2 mb-1">
-              {file && file.type ? (
-                file.type.startsWith('image/') ? (
-                  <FaImage className="mr-1 text-primary" />
-                ) : (
-                  <FaFile className="mr-1 text-primary" />
-                )
-              ) : (
-                <FaFile className="mr-1 text-primary" />
-              )}
-              <span className="mr-1">
-                {file && file.name ? (file.name.length > 20 ? file.name.substring(0, 20) + '...' : file.name) : 'Unknown file'}
-              </span>
-              <button
-                onClick={() => setUploadedFiles(files => files.filter((_, i) => i !== index))}
-                className="btn btn-xs btn-circle btn-ghost"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

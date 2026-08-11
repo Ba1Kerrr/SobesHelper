@@ -28,4 +28,8 @@ export const rules: Required<ModuleOptions>['rules'] = [
       },
     },
   },
+  {
+    test: /\.(ico|png|icns)$/,
+    type: 'asset/resource',
+  },
 ];

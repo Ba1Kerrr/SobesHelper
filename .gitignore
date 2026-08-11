@@ -1,3 +1,7 @@
+# IDE
+.idea/
+.vscode/
+
 # Logs
 logs
 *.log
@@ -93,3 +97,7 @@ out/
 
 # Electron
 **/node_modules/electron/**
+
+# Python (python/hh_applicant_tool)
+__pycache__/
+*.pyc

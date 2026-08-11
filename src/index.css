@@ -2,7 +2,61 @@
 @tailwind components;
 @tailwind utilities;
 
+html, body {
+  background: transparent;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
     Arial, sans-serif;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag-region {
+  -webkit-app-region: no-drag;
+}
+
+/* Signature element: the assistant bubble's left-edge bar while an answer is
+   streaming in - a quiet "still listening" pulse instead of a generic spinner. */
+@keyframes streaming-pulse-opacity {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@keyframes streaming-pulse-shift {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 0% 200%; }
+}
+
+@keyframes streaming-pulse-glow {
+  0%, 100% { box-shadow: 0 0 6px rgba(122,92,255,0.5); }
+  50% { box-shadow: 0 0 14px rgba(49,230,224,0.7); }
+}
+
+.streaming-pulse-bar {
+  background: linear-gradient(180deg, #7A5CFF, #31E6E0, #7A5CFF);
+  background-size: 100% 200%;
+  animation:
+    streaming-pulse-opacity 1.4s ease-in-out infinite,
+    streaming-pulse-shift 3s linear infinite,
+    streaming-pulse-glow 1.4s ease-in-out infinite;
+}
+
+/* Restrained to the handful of elements meant to draw the eye: send button,
+   active mode pill. Everything else in the UI stays flat. --accent-glow is
+   set from the accent color picker in Settings (falls back to the default
+   purple), so a custom accent color also changes the glow, not just the
+   send button's fill. */
+.neon-glow {
+  box-shadow: 0 0 12px var(--accent-glow, rgba(122,92,255,0.55));
+}
+
+/* One radius scale used everywhere instead of ad-hoc rounded-md/rounded-lg
+   mixed per component: sm for inline pills/badges, md for cards/inputs, full
+   for circular controls (kept as Tailwind's own rounded-full). */
+.card-surface {
+  border-radius: 0.75rem;
 }

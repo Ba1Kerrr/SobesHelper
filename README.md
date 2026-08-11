@@ -1,150 +1,85 @@
-<div align="right">
-  <a href="#interview-assistant-中文">中文</a> | <a href="#interview-assistant-english">English</a>
-</div>
+# Interview Assistant
 
-# interview-assistant-中文
+A stealth live copilot for technical interviews on Windows. It listens to the call, transcribes it in real time, and answers in a small always-on-top window that's excluded from screen capture - so it never appears in a screen share or a recording.
 
-Interview Assistant 是一款基于 Electron 的应用，可以捕获系统音频，并提供面试中回答建议。
+## What this is not
 
-## 为什么是Interview Assistant
+This tool never interacts with the interview call itself - no auto-typing into a shared editor, no clicking around in someone else's UI, no injecting anything into the meeting. The only inputs are: what the app hears (system audio via screen-share capture), what you paste or screenshot, and what you type into its own window. Everything it produces stays in its own window until you decide to say it out loud yourself. It's a second pair of eyes reading the problem with you, not a hand on someone else's keyboard.
 
-1. **实时语音转文字**: 支持 **Deepgram** 和 **60db** 两种实时语音识别引擎，可在设置页面自由切换。
-2. **语音播报回答 (TTS)**: 集成 60db 文字转语音，可朗读 GPT 的回答建议（手动播放或自动播放，建议搭配耳机使用，避免被会议麦克风采集）。
-3. **智能 GPT 回答**: 集成 OpenAI 的 GPT 模型，为面试问题提供即时、智能的回答建议。(支持带转发地址的第三方API)
-4. **内容管理**: 用户可以上传自己的文件，包括文本、图片和 PDF 文件，和你自己定制的提示词，可以极大的定制你想要GPT回应的风格，这些资料将用于个性化 GPT 的回答。
-5. **统一上下文**: 在实时回答页面中，对话基于知识页面的配置，都在同一个上下文中进行，确保回答的连贯性和相关性。
-6. **跨平台支持**: 作为 Electron 应用，可以在 Windows、macOS系统上运行。
+## Features
 
-## 演示
+- **Multi-provider answers** - OpenAI-compatible API, [Ollama](https://ollama.com) (local, free), or the Claude Code CLI (rides your existing subscription, no separate API key). Switch any time in Settings, no restart.
+- **Multi-provider transcription** - Deepgram (nova-3, recommended) or 60db, with real language selection (Auto-detect works but picking your actual language is more reliable).
+- **Modes** - Coding / Explain / Behavioral, each with its own system prompt and a color-coded pill in the header. Cycle with a hotkey.
+- **Chat interface** - message history, type a question directly or let it auto-answer from the live transcript, quick-action presets (ask now, analyze the screen, summarize the conversation).
+- **Resume context** - paste your resume once in Settings, it's included on every question automatically.
+- **Knowledge Base** - upload reference files (PDF, text, images) that stay in context for the whole session.
+- **Obsidian notes viewer** - point it at a vault folder, browse and preview `.md` notes, pull one into the Knowledge Base with one click.
+- **Interview recordings** - optionally saves the captured system audio (`.webm`) per meeting, with a browsable list and inline playback.
+- **Spoken answers (TTS)** - 60db text-to-speech, off by default, with output device and volume control so playback doesn't get picked up by your own mic.
+- **Stealth window** - content-protected (invisible to `getDisplayMedia`/screen recording), hidden from the taskbar and Alt-Tab, lives in the system tray, adjustable opacity, global hotkey to toggle click-through.
+- **HUD** - a tiny separate status readout (listening / click-through state) that stays visible even when the main window is hidden, also excluded from screen capture.
+- **Rebindable global hotkeys** - defaults use triple-modifier combos to avoid colliding with other apps; if one still conflicts, Settings shows which and lets you type a replacement live.
+- **Usage stats** - questions answered, average response time, listening sessions, recordings saved - all local, nothing leaves your machine.
+- **Jobs (hh.ru)** - search and auto-apply to HH.ru vacancies, track your responses, and pin the vacancy you're currently interviewing for so its context feeds into every answer. Backed by a vendored [hh-applicant-tool](https://github.com/s3rgeym/hh-applicant-tool) (see Credits) driven through a local Python bridge process - requires a Python interpreter, see Setup.
 
-[Interview Assistant 演示视频](https://github.com/user-attachments/assets/3b42cc96-1b67-48e1-b40c-dbd78c328f1b)
+## Architecture
 
-点击上方链接查看演示视频
+Two windows, both `BrowserWindow`s with `setContentProtection(true)`:
 
-## 与其他工具的对比
+- **Main window** (`src/pages/OverlayPage.tsx`) - the whole app: chat, Settings, Knowledge Base, Notes, Recordings, Jobs, switched via header icons rather than separate windows/routes. Owns the STT capture pipeline (`getDisplayMedia` → PCM → `send-audio` IPC), the LLM request flow, and recording-to-disk.
+- **HUD window** (`src/pages/HudPage.tsx`) - read-only, click-through, always-on-top status pill.
 
-Interview Assistant 相比其他面试辅助工具有以下优势：
+Main process (`src/index.ts`) owns both windows, the system tray, global hotkeys, and every filesystem/network operation that can't run in a sandboxed renderer (LLM calls, STT WebSocket connections, clipboard, screen capture, file I/O). The renderer talks to it entirely through a typed `window.electronAPI` bridge (`src/preload.ts` + `src/electron-api.d.ts`).
 
-1. **实时语音识别**: 利用 Deepgram API(新用户有200美元额度)，我们提供比传统语音识别更快、更准确的实时转录。
-2. **个性化知识库**: 用户可以上传自己的简历、个人信息等文档，GPT 模型会基于这些信息提供更加个性化的回答建议。
-3. **跨平台支持**: 作为 Electron 应用，支持 Windows、macOS。
-4. **隐私保护**: 所有数据都在本地处理，不会上传到云端，保护用户的隐私信息。
-5. **开源透明**: 我的代码完全开源，可以自由查看、修改和贡献。
+LLM providers are a small pluggable abstraction under `src/llm/` (`types.ts`, `router.ts`, `providers/{openaiCompat,ollama,claudeCode}.ts`) - adding a new provider means implementing one `ask()` generator, nothing else changes.
 
-下面是 Interview Assistant 与其他面试辅助工具的功能对比表：
+## Setup
 
-|                                                      | Windows | Mac  | 个性定制prompt/上传个人文件 |
-| ---------------------------------------------------- | ------- | ---- | ----------- |
-| [cheetah](https://github.com/leetcode-mafia/cheetah) |         | ✅    |             |
-| [ecoute](https://github.com/SevaSk/ecoute)           | ✅       |      |             |
-| Interview Copilot                                    | ✅       | ✅    | ✅          |
+```bash
+npm install
+npm start
+```
 
+On first launch, open Settings (⚙️ in the header) and configure:
+1. A model provider (OpenAI-compatible API key, or point at a local Ollama, or the Claude Code CLI).
+2. A transcription provider (Deepgram or 60db API key) and your actual language.
 
-这个对比表格清晰地展示了 Interview Assistant 相比其他工具的优势，特别是跨平台和定制prompt。
+Everything else (resume, knowledge base, Obsidian vault, recordings folder, hotkeys) is optional.
 
-## 安装和使用
+The **Jobs** tab needs a separate Python interpreter (3.11+):
 
-1. 从 Release 页面下载适合您操作系统的安装包。
-2. 运行 Interview Assistant。
-3. 在设置页面配置您的 OpenAI API 密钥，以及语音识别引擎的密钥（Deepgram 或 60db）。
-4. 开始使用实时面试辅助功能或管理您的知识库。
+```bash
+cd python
+pip install -r requirements.txt
+playwright install chromium   # only needed for the hh.ru login flow
+```
 
-## 配置说明
+If `python` isn't the right interpreter on your machine (e.g. you're using a specific venv), set the
+full path in Settings → "Jobs (hh.ru)" → Python Interpreter Path, then use "Test connection" to verify.
 
-要使用 Interview Assistant，您需要：
+```bash
+npm run make   # build a distributable
+```
 
-1. OpenAI API 密钥: 可以从 https://platform.openai.com 获取，或者可以购买第三方带有转发地址的API也同样支持，记得选择转发的复选框，配置完成后可以点击测试按钮进行测试。
-2. 语音识别引擎（二选一，可在设置页面切换）：
-   - **Deepgram API 密钥**: 请访问 https://deepgram.com 注册并获取，新用户有200美元的免费额度，首页教程简单。
-   - **60db API 密钥**: 请访问 https://60db.ai 注册并获取（文档见 https://docs.60db.ai）。该密钥同时用于「语音播报回答 (TTS)」功能。
-3. 60db 语音播报 (可选): 选择 60db 密钥后，可在设置页面点击「Load Voices」加载可用音色，并勾选「Auto-speak GPT answers」开启自动朗读。
+## Default hotkeys
 
-![image-20240919163506505](https://cdn.jsdelivr.net/gh/filifili233/blogimg@master/uPic/image-20240919163506505.png)
+| Hotkey | Action |
+|---|---|
+| `Ctrl+Alt+Shift+O` | Show/hide the main window |
+| `Ctrl+Alt+Shift+Enter` | Ask now (send the live transcript buffer) |
+| `Ctrl+Shift+M` | Cycle mode |
+| `Ctrl+Alt+Shift+X` | Clear the transcript buffer |
+| `Ctrl+Shift+L` | Toggle click-through |
 
-## 开发
+All of these are rebindable in Settings if one conflicts with something else you run.
 
-本项目基于 Electron 和 React 开发。请按以下步骤操作：
+## Credits
 
-1. 克隆仓库: `git clone https://github.com/nohairblingbling/Interview-Assistant`
-2. 安装依赖: `npm install`
-3. 安装 Electron: `npm install electron`
-4. 启动开发服务器: `npm start`
-5. 构建应用: `npm run make`
-
-## 许可证
-
-本项目采用 MIT 许可证。详情请见 LICENSE 文件。
-
----
-
-# interview-assistant-english
-
-Interview Assistant is an Electron-based application that captures system audio (online meetings) and provides real-time interview response suggestions.
-
-## Why Interview Assistant
-
-1. **Real-time Speech-to-Text**: Supports two real-time speech recognition engines — **Deepgram** and **60db** — switchable from the Settings page.
-2. **Spoken Answers (TTS)**: Integrates 60db Text-to-Speech to read GPT answer suggestions aloud (manual or auto-play; best used with headphones so the playback isn't picked up by the meeting mic).
-3. **Intelligent GPT Responses**: Integrates OpenAI's GPT model to provide instant, intelligent answer suggestions for interview questions. (Supports third-party APIs with forwarding addresses)
-4. **Content Management**: Users can upload their own files, including text, images, and PDF files, along with customized prompts, greatly customizing the style of GPT responses. These materials will be used to personalize GPT's answers.
-5. **Unified Context**: In the real-time response page, conversations are based on the knowledge page configuration, all within the same context, ensuring coherence and relevance of answers.
-6. **Cross-platform Support**: As an Electron application, it can run on Windows and macOS systems.
-
-## Demo
-
-[Interview Assistant Demo Video](https://github.com/user-attachments/assets/3b42cc96-1b67-48e1-b40c-dbd78c328f1b)
-
-Click the link above to view the demo video
-
-## Comparison with Other Tools
-
-Interview Assistant has the following advantages compared to other interview assistance tools:
-
-1. **Real-time Speech Recognition**: Using Deepgram API (new users get $200 credit), we provide faster and more accurate real-time transcription than traditional speech recognition.
-2. **Personalized Knowledge Base**: Users can upload their own resumes, personal information, and other documents. The GPT model will provide more personalized answer suggestions based on this information.
-3. **Cross-platform Support**: As an Electron application, it supports Windows and macOS.
-4. **Privacy Protection**: All data is processed locally and not uploaded to the cloud, protecting users' privacy.
-5. **Open Source Transparency**: Our code is completely open source, free to view, modify, and contribute to.
-
-Below is a feature comparison table of Interview Assistant with other interview assistance tools:
-
-|                                                      | Windows | Mac | Custom prompts/Personal file upload |
-| ---------------------------------------------------- | ------- | --- | ----------------------------------- |
-| [cheetah](https://github.com/leetcode-mafia/cheetah) |         | ✅   |                                     |
-| [ecoute](https://github.com/SevaSk/ecoute)           | ✅       |     |                                     |
-| Interview Copilot                                    | ✅       | ✅   | ✅                                   |
-
-This comparison table clearly shows the advantages of Interview Assistant compared to other tools, especially in terms of cross-platform support and custom prompts.
-
-## Installation and Usage
-
-1. Download the installation package suitable for your operating system from the Release page.
-2. Run Interview Assistant.
-3. Configure your OpenAI API key and a speech recognition key (Deepgram or 60db) on the settings page.
-4. Start using the real-time interview assistance feature or manage your knowledge base.
-
-## Configuration Instructions
-
-To use Interview Assistant, you need:
-
-1. OpenAI API key: Can be obtained from https://platform.openai.com, or you can purchase a third-party API with a forwarding address which is also supported. Remember to select the forwarding checkbox, and you can click the test button to test after configuration.
-2. A speech recognition engine (pick one, switchable on the Settings page):
-   - **Deepgram API key**: Please visit https://deepgram.com to register and obtain. New users get $200 free credit, and the homepage tutorial is simple.
-   - **60db API key**: Register at https://60db.ai (docs at https://docs.60db.ai). This same key also powers the "Spoken Answers (TTS)" feature.
-3. 60db Text-to-Speech (optional): After entering a 60db key, click "Load Voices" in Settings to fetch available voices, and enable "Auto-speak GPT answers" to have answers read aloud automatically.
-
-![image-20240919163506505](https://cdn.jsdelivr.net/gh/filifili233/blogimg@master/uPic/image-20240919163506505.png)
-
-## Development
-
-This project is developed based on Electron and React. Please follow these steps:
-
-1. Clone the repository: `git clone https://github.com/nohairblingbling/Interview-Assistant`
-2. Install dependencies: `npm install`
-3. Install Electron: `npm install electron`
-4. Start the development server: `npm start`
-5. Build the application: `npm run make`
+- Forked from [nohairblingbling/Interview-Assistant](https://github.com/nohairblingbling/Interview-Assistant), the original Electron app this project started from.
+- Several features (HUD status indicator, click-through/cursor-protection concept, quick-action presets, rebindable hotkeys) were inspired by the changelog of [sobes.tech](https://sobes.tech), a commercial interview-copilot product - implemented independently here from scratch, not derived from their code.
+- [s3rgeym/hh-applicant-tool](https://github.com/s3rgeym/hh-applicant-tool) (by s3rgeym) - its Python package is vendored under `python/hh_applicant_tool/` and powers the Jobs tab, with the author's direct permission to include it here. It's driven through `python/bridge.py`, a small JSON-RPC-over-stdio adapter around its existing `ui/api.py` `Api` class; the UI itself is a from-scratch React reimplementation, not a copy of its pywebview-based one. See `python/README.md` for details.
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+MIT - see [LICENSE](./LICENSE). This does not extend to third-party projects linked above under their own licenses.
