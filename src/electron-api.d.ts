@@ -7,7 +7,6 @@ export interface ElectronAPI {
   parsePDF: (pdfBuffer: ArrayBuffer) => Promise<{ text: string, error?: string }>;
   processImage: (imagePath: string) => Promise<string>;
   highlightCode: (code: string, language: string) => Promise<string>;
-  getSystemAudioStream: () => Promise<string[]>;
   ipcRenderer: {
     removeAllListeners: any;
     invoke(channel: string, ...args: any[]): Promise<any>;
@@ -47,6 +46,8 @@ export interface ElectronAPI {
   transcribeAudio: (audioBuffer: ArrayBuffer, config: any) => Promise<TranscriptionResult>;
   speak60db: (text: string, config: any) => Promise<{ success: boolean; audio_base64?: string; output_format?: string; error?: string }>;
   get60dbVoices: (config: any) => Promise<{ success: boolean; voices: Array<{ voice_id: string; name: string; labels?: { language_name?: string; gender?: string; accent?: string } }>; error?: string }>;
+  speakTTS: (text: string, config: any) => Promise<{ success: boolean; audio_base64?: string; output_format?: string; error?: string }>;
+  getTTSVoices: (config: any) => Promise<{ success: boolean; voices: string[] } | null>;
   callHHTool: (method: string, params?: Record<string, any>) => Promise<any>;
   classifyFragment: (config: any, text: string) => Promise<{ content?: string; error?: string }>;
   openExternal: (url: string) => Promise<void>;

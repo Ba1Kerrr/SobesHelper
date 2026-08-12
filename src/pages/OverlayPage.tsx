@@ -178,6 +178,11 @@ const OverlayPage: React.FC = () => {
   // just waiting for the in-flight one to clear.
   const classifyInFlightRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  // Only set when audio_capture_mode is "both" - the mic stream mixed
+  // alongside the system-audio stream. Tracked separately from userMedia
+  // since it needs its own cleanup on stop but isn't the "primary" stream
+  // MediaRecorder saves.
+  const secondaryStreamRef = useRef<MediaStream | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isListeningRef = useRef(false);
@@ -189,12 +194,40 @@ const OverlayPage: React.FC = () => {
     if (!trimmed) return;
     try {
       const config = await window.electronAPI.getConfig();
-      if (!config.sixtydb_api_key) {
+      const provider = config.tts_provider || "60db";
+
+      // Runs entirely client-side - no main-process round trip, no API key,
+      // quality depends on whatever voices the OS has installed.
+      if (provider === "webspeech") {
+        if (!("speechSynthesis" in window)) {
+          setError("This system doesn't support built-in text-to-speech.");
+          return;
+        }
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(trimmed);
+        if (config.webspeech_voice) {
+          const voice = window.speechSynthesis.getVoices().find((v) => v.name === config.webspeech_voice);
+          if (voice) utterance.voice = voice;
+        }
+        utterance.volume = typeof config.tts_volume === "number" ? config.tts_volume : 1;
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => setIsSpeaking(false);
+        utterance.onerror = () => setIsSpeaking(false);
+        window.speechSynthesis.speak(utterance);
+        return;
+      }
+
+      if (provider === "openai" && !config.openai_key) {
+        setError("OpenAI API key not configured. Add it in Settings to use Text-to-Speech.");
+        return;
+      }
+      if (provider === "60db" && !config.sixtydb_api_key) {
         setError("60db API key not configured. Add it in Settings to use Text-to-Speech.");
         return;
       }
+
       setIsSpeaking(true);
-      const result = await window.electronAPI.speak60db(trimmed, config);
+      const result = await window.electronAPI.speakTTS(trimmed, config);
       if (!result.success || !result.audio_base64) {
         throw new Error(result.error || "Failed to synthesize speech");
       }
@@ -202,6 +235,8 @@ const OverlayPage: React.FC = () => {
       const mime = result.output_format === "wav" ? "audio/wav" : result.output_format === "ogg" ? "audio/ogg" : "audio/mpeg";
       const audio = new Audio(`data:${mime};base64,${result.audio_base64}`);
       audio.volume = typeof config.tts_volume === "number" ? config.tts_volume : 1;
+      // Web Speech has no output-device routing equivalent to setSinkId -
+      // it always plays through whatever the OS default output is.
       if (config.tts_output_device_id && "setSinkId" in audio) {
         await (audio as any).setSinkId(config.tts_output_device_id).catch(() => {});
       }
@@ -481,13 +516,37 @@ const OverlayPage: React.FC = () => {
 
   const startListening = async () => {
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: false,
-        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 },
-      });
+      const config = await window.electronAPI.getConfig();
+      const captureMode = config.audio_capture_mode || "system";
+      const audioConstraints = {
+        echoCancellation: config.audio_echo_cancellation !== false,
+        noiseSuppression: config.audio_noise_suppression !== false,
+        autoGainControl: config.audio_auto_gain !== false,
+        sampleRate: 16000,
+      };
+      const micConstraints = {
+        ...audioConstraints,
+        deviceId: config.audio_input_device_id ? { exact: config.audio_input_device_id } : undefined,
+      };
+
+      let stream: MediaStream;
+      let secondaryStream: MediaStream | null = null;
+      if (captureMode === "microphone") {
+        stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: micConstraints });
+      } else if (captureMode === "both") {
+        // System audio (what the meeting plays) is the primary stream -
+        // it's the one MediaRecorder saves below. The mic is mixed in
+        // purely for transcription, connected straight into the same
+        // ScriptProcessor node further down (Web Audio sums multiple
+        // inputs on one node automatically, no merger node needed).
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: false, audio: audioConstraints });
+        secondaryStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: micConstraints });
+        secondaryStreamRef.current = secondaryStream;
+      } else {
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: false, audio: audioConstraints });
+      }
       setUserMedia(stream);
 
-      const config = await window.electronAPI.getConfig();
       const result = await window.electronAPI.ipcRenderer.invoke("start-stt", {
         stt_provider: config.stt_provider || "deepgram",
         deepgram_key: config.deepgram_api_key,
@@ -523,6 +582,9 @@ const OverlayPage: React.FC = () => {
       const proc = context.createScriptProcessor(4096, 1, 1);
       setProcessor(proc);
       source.connect(proc);
+      if (secondaryStream) {
+        context.createMediaStreamSource(secondaryStream).connect(proc);
+      }
       proc.connect(context.destination);
       proc.onaudioprocess = (e: { inputBuffer: { getChannelData: (arg0: number) => any } }) => {
         const inputData = e.inputBuffer.getChannelData(0);
@@ -549,6 +611,10 @@ const OverlayPage: React.FC = () => {
     }
     mediaRecorderRef.current = null;
     if (userMedia) userMedia.getTracks().forEach((track) => track.stop());
+    if (secondaryStreamRef.current) {
+      secondaryStreamRef.current.getTracks().forEach((track) => track.stop());
+      secondaryStreamRef.current = null;
+    }
     if (audioContext) audioContext.close();
     if (processor) processor.disconnect();
     window.electronAPI.ipcRenderer.invoke("stop-stt");

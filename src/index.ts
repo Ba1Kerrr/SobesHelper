@@ -35,6 +35,7 @@ import { callHHTool, killHHBridge, setHHEventListener } from "./pythonBridge";
 import { initJobAutomation, rescheduleJobAutomation, clampIntervalHours } from "./jobAutomation";
 import * as superjob from "./superjob";
 import { fetchFlRuFeed } from "./flRuFeed";
+import * as tts from "./tts";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 import electronSquirrelStartup from "electron-squirrel-startup";
@@ -1087,23 +1088,6 @@ ipcMain.handle("highlightCode", async (event, code, language) => {
   return Prism.highlight(code, Prism.languages[language], language);
 });
 
-ipcMain.handle("get-system-audio-stream", async () => {
-  try {
-    const sources = await desktopCapturer.getSources({
-      types: ["window", "screen"],
-      fetchWindowIcons: false,
-    });
-    const audioSources = sources.filter(
-      (source) =>
-        source.name.toLowerCase().includes("sound") ||
-        source.name.toLowerCase().includes("audio")
-    );
-    return audioSources.map((source) => source.id);
-  } catch (error) {
-    throw error;
-  }
-});
-
 app.on("ready", () => {
   session.defaultSession.setDisplayMediaRequestHandler(
     (request, callback) => {
@@ -1260,9 +1244,7 @@ ipcMain.handle("get-desktop-sources", async () => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// Real-time Speech-to-Text (provider-agnostic)
-// ---------------------------------------------------------------------------
+// Real-time speech-to-text, provider-agnostic.
 // The renderer talks to a single set of channels (start-stt / send-audio /
 // stop-stt) and listens for unified events (stt-transcript / stt-status /
 // stt-error). Internally we route to either Deepgram (via @deepgram/sdk) or
@@ -1492,55 +1474,8 @@ ipcMain.handle("stop-stt", () => {
   activeProvider = null;
 });
 
-// ---------------------------------------------------------------------------
-// 60db Text-to-Speech + voices
-// ---------------------------------------------------------------------------
-
 ipcMain.handle("speak-60db", async (event, { text, config }) => {
-  try {
-    if (!config.sixtydb_api_key) {
-      throw new Error("60db API key missing");
-    }
-    if (!text || !text.trim()) {
-      throw new Error("No text to synthesize");
-    }
-    // Non-streaming synthesis: returns base64 audio in JSON. We default to mp3
-    // so the renderer can play it directly via a data: URI.
-    const response = await axios.post(
-      "https://api.60db.ai/tts-synthesize",
-      {
-        text: text.slice(0, 5000),
-        voice_id: config.sixtydb_voice_id || undefined,
-        output_format: "mp3",
-        speed: 1,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${config.sixtydb_api_key}`,
-          "Content-Type": "application/json",
-        },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      }
-    );
-
-    const data = response.data || {};
-    if (!data.audio_base64) {
-      throw new Error(data.message || "60db returned no audio");
-    }
-    return {
-      success: true,
-      audio_base64: data.audio_base64,
-      output_format: data.output_format || "mp3",
-    };
-  } catch (error: any) {
-    const message = axios.isAxiosError(error)
-      ? error.response
-        ? `60db TTS error: ${error.response.status} ${error.response.statusText}`
-        : error.message
-      : error.message || "Unknown error";
-    return { success: false, error: message };
-  }
+  return invoke60dbSpeak(text, config);
 });
 
 ipcMain.handle("get-60db-voices", async (event, config) => {
@@ -1561,4 +1496,47 @@ ipcMain.handle("get-60db-voices", async (event, config) => {
       : error.message || "Unknown error";
     return { success: false, error: message, voices: [] };
   }
+});
+
+// Dispatches to whichever TTS provider is configured. Web Speech isn't
+// handled here - it runs entirely in the renderer via window.speechSynthesis,
+// since there's no main-process equivalent of that browser API.
+ipcMain.handle("speak-tts", async (event, { text, config }) => {
+  if (config.tts_provider === "openai") return tts.synthesizeOpenAI(text, config);
+  return invoke60dbSpeak(text, config);
+});
+
+async function invoke60dbSpeak(text: string, config: any) {
+  try {
+    if (!config.sixtydb_api_key) {
+      throw new Error("60db API key missing");
+    }
+    if (!text || !text.trim()) {
+      throw new Error("No text to synthesize");
+    }
+    const response = await axios.post(
+      "https://api.60db.ai/tts-synthesize",
+      { text: text.slice(0, 5000), voice_id: config.sixtydb_voice_id || undefined, output_format: "mp3", speed: 1 },
+      {
+        headers: { Authorization: `Bearer ${config.sixtydb_api_key}`, "Content-Type": "application/json" },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      }
+    );
+    const data = response.data || {};
+    if (!data.audio_base64) throw new Error(data.message || "60db returned no audio");
+    return { success: true, audio_base64: data.audio_base64, output_format: data.output_format || "mp3" };
+  } catch (error: any) {
+    const message = axios.isAxiosError(error)
+      ? error.response
+        ? `60db TTS error: ${error.response.status} ${error.response.statusText}`
+        : error.message
+      : error.message || "Unknown error";
+    return { success: false, error: message };
+  }
+}
+
+ipcMain.handle("get-tts-voices", async (event, config) => {
+  if (config.tts_provider === "openai") return { success: true, voices: tts.listOpenAIVoices() };
+  return null;
 });

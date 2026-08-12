@@ -31,6 +31,10 @@ const Settings: React.FC = () => {
   const [sixtydbApiKey, setSixtydbApiKey] = useState('');
   const [sixtydbVoiceId, setSixtydbVoiceId] = useState('');
   const [ttsAutoplay, setTtsAutoplay] = useState(false);
+  const [ttsProvider, setTtsProvider] = useState<'webspeech' | '60db' | 'openai'>('60db');
+  const [webspeechVoice, setWebspeechVoice] = useState('');
+  const [webspeechVoices, setWebspeechVoices] = useState<string[]>([]);
+  const [openaiTtsVoice, setOpenaiTtsVoice] = useState('alloy');
   const [voices, setVoices] = useState<Array<{ voice_id: string; name: string; labels?: { language_name?: string; gender?: string; accent?: string } }>>([]);
   const [voicesLoading, setVoicesLoading] = useState(false);
 
@@ -47,6 +51,12 @@ const Settings: React.FC = () => {
   const [ttsOutputDeviceId, setTtsOutputDeviceId] = useState('');
   const [ttsVolume, setTtsVolume] = useState(1);
   const [audioOutputs, setAudioOutputs] = useState<Array<{ deviceId: string; label: string }>>([]);
+  const [audioCaptureMode, setAudioCaptureMode] = useState<'system' | 'microphone' | 'both'>('system');
+  const [audioInputDeviceId, setAudioInputDeviceId] = useState('');
+  const [audioInputs, setAudioInputs] = useState<Array<{ deviceId: string; label: string }>>([]);
+  const [audioEchoCancellation, setAudioEchoCancellation] = useState(true);
+  const [audioNoiseSuppression, setAudioNoiseSuppression] = useState(true);
+  const [audioAutoGain, setAudioAutoGain] = useState(true);
 
   const [hotkeys, setHotkeys] = useState<Array<{ id: string; label: string; accelerator: string; registered: boolean }>>([]);
   const [hotkeyDrafts, setHotkeyDrafts] = useState<Record<string, string>>({});
@@ -130,8 +140,22 @@ const Settings: React.FC = () => {
             .filter((d) => d.kind === 'audiooutput')
             .map((d) => ({ deviceId: d.deviceId, label: d.label || `Output ${d.deviceId.slice(0, 6)}` }))
         );
+        setAudioInputs(
+          devices
+            .filter((d) => d.kind === 'audioinput')
+            .map((d) => ({ deviceId: d.deviceId, label: d.label || `Input ${d.deviceId.slice(0, 6)}` }))
+        );
       })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // Chromium loads voices asynchronously - often empty on the first call,
+    // populated once 'voiceschanged' fires.
+    const loadWebspeechVoices = () => setWebspeechVoices(window.speechSynthesis?.getVoices().map((v) => v.name) || []);
+    loadWebspeechVoices();
+    window.speechSynthesis?.addEventListener('voiceschanged', loadWebspeechVoices);
+    return () => window.speechSynthesis?.removeEventListener('voiceschanged', loadWebspeechVoices);
   }, []);
 
   useEffect(() => {
@@ -215,6 +239,9 @@ const Settings: React.FC = () => {
       setSixtydbApiKey(config.sixtydb_api_key || '');
       setSixtydbVoiceId(config.sixtydb_voice_id || '');
       setTtsAutoplay(!!config.tts_autoplay);
+      setTtsProvider(config.tts_provider === 'webspeech' || config.tts_provider === 'openai' ? config.tts_provider : '60db');
+      setWebspeechVoice(config.webspeech_voice || '');
+      setOpenaiTtsVoice(config.openai_tts_voice || 'alloy');
       setHudPosition(config.hud_position || 'top-right');
       setClickThroughAlwaysOn(!!config.overlay_click_through_always_on);
       setRecordInterviews(!!config.record_interviews);
@@ -225,6 +252,13 @@ const Settings: React.FC = () => {
       setQuestionDetectionAiFallback(config.question_detection_ai_fallback !== false);
       setTtsOutputDeviceId(config.tts_output_device_id || '');
       setTtsVolume(typeof config.tts_volume === 'number' ? config.tts_volume : 1);
+      setAudioCaptureMode(
+        config.audio_capture_mode === 'microphone' || config.audio_capture_mode === 'both' ? config.audio_capture_mode : 'system'
+      );
+      setAudioInputDeviceId(config.audio_input_device_id || '');
+      setAudioEchoCancellation(config.audio_echo_cancellation !== false);
+      setAudioNoiseSuppression(config.audio_noise_suppression !== false);
+      setAudioAutoGain(config.audio_auto_gain !== false);
       setPythonPath(config.python_path || 'python');
       setAccentColor(config.accent_color || '#7A5CFF');
       if (Array.isArray(config.model_slots) && config.model_slots.length) {
@@ -257,6 +291,9 @@ const Settings: React.FC = () => {
         sixtydb_api_key: sixtydbApiKey,
         sixtydb_voice_id: sixtydbVoiceId,
         tts_autoplay: ttsAutoplay,
+        tts_provider: ttsProvider,
+        webspeech_voice: webspeechVoice,
+        openai_tts_voice: openaiTtsVoice,
         hud_position: hudPosition,
         overlay_click_through_always_on: clickThroughAlwaysOn,
         record_interviews: recordInterviews,
@@ -266,6 +303,11 @@ const Settings: React.FC = () => {
         resume,
         tts_output_device_id: ttsOutputDeviceId,
         tts_volume: ttsVolume,
+        audio_capture_mode: audioCaptureMode,
+        audio_input_device_id: audioInputDeviceId,
+        audio_echo_cancellation: audioEchoCancellation,
+        audio_noise_suppression: audioNoiseSuppression,
+        audio_auto_gain: audioAutoGain,
         python_path: pythonPath,
         question_detection_ai_fallback: questionDetectionAiFallback,
         accent_color: accentColor,
@@ -551,7 +593,7 @@ const Settings: React.FC = () => {
           className="input input-bordered w-full"
         />
         <label className="label">
-          <span className="label-text-alt">Used for 60db transcription (if selected above) and for speaking answers aloud.</span>
+          <span className="label-text-alt">Used for 60db transcription (if selected above), and for speaking answers aloud if 60db is the TTS provider below.</span>
         </label>
       </div>
       <div className="mb-4">
@@ -562,37 +604,99 @@ const Settings: React.FC = () => {
             onChange={(e) => setTtsAutoplay(e.target.checked)}
             className="checkbox mr-2"
           />
-          <span>Speak answers aloud (60db TTS)</span>
+          <span>Speak answers aloud</span>
         </label>
         <label className="label">
           <span className="label-text-alt">Off by default - the assistant only shows text unless you turn this on. Best with headphones/a private output device, so playback isn&apos;t captured by the meeting.</span>
         </label>
       </div>
       {ttsAutoplay && (
-        <div className="mb-4">
-          <label className="label">60db Voice</label>
-          <div className="flex space-x-2">
+        <>
+          <div className="mb-4">
+            <label className="label">TTS Provider</label>
             <select
-              value={sixtydbVoiceId}
-              onChange={(e) => setSixtydbVoiceId(e.target.value)}
-              className="select select-bordered flex-1"
+              value={ttsProvider}
+              onChange={(e) => setTtsProvider(e.target.value as 'webspeech' | '60db' | 'openai')}
+              className="select select-bordered w-full"
             >
-              <option value="">System default</option>
-              {voices.map((v) => (
-                <option key={v.voice_id} value={v.voice_id}>
-                  {v.name}
-                  {v.labels?.language_name ? ` (${v.labels.language_name}${v.labels.accent ? `, ${v.labels.accent}` : ''})` : ''}
-                </option>
-              ))}
+              <option value="webspeech">Built-in (free, no key - uses your OS's voices)</option>
+              <option value="60db">60db</option>
+              <option value="openai">OpenAI</option>
             </select>
-            <button type="button" onClick={loadVoices} className="btn btn-outline" disabled={voicesLoading}>
-              {voicesLoading ? 'Loading...' : 'Load Voices'}
-            </button>
           </div>
-          <label className="label">
-            <span className="label-text-alt">Needs the 60db API key above. Optional - leave as "System default" if you don't care which voice.</span>
-          </label>
-        </div>
+
+          {ttsProvider === 'webspeech' && (
+            <div className="mb-4">
+              <label className="label">Voice</label>
+              <select
+                value={webspeechVoice}
+                onChange={(e) => setWebspeechVoice(e.target.value)}
+                className="select select-bordered w-full"
+              >
+                <option value="">System default</option>
+                {webspeechVoices.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <label className="label">
+                <span className="label-text-alt">
+                  {webspeechVoices.length === 0
+                    ? "No voices found yet - some systems load them lazily, try reopening Settings."
+                    : "Pulled from voices already installed on this OS."}
+                </span>
+              </label>
+            </div>
+          )}
+
+          {ttsProvider === '60db' && (
+            <div className="mb-4">
+              <label className="label">60db Voice</label>
+              <div className="flex space-x-2">
+                <select
+                  value={sixtydbVoiceId}
+                  onChange={(e) => setSixtydbVoiceId(e.target.value)}
+                  className="select select-bordered flex-1"
+                >
+                  <option value="">System default</option>
+                  {voices.map((v) => (
+                    <option key={v.voice_id} value={v.voice_id}>
+                      {v.name}
+                      {v.labels?.language_name ? ` (${v.labels.language_name}${v.labels.accent ? `, ${v.labels.accent}` : ''})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" onClick={loadVoices} className="btn btn-outline" disabled={voicesLoading}>
+                  {voicesLoading ? 'Loading...' : 'Load Voices'}
+                </button>
+              </div>
+              <label className="label">
+                <span className="label-text-alt">Needs the 60db API key above. Optional - leave as "System default" if you don't care which voice.</span>
+              </label>
+            </div>
+          )}
+
+          {ttsProvider === 'openai' && (
+            <div className="mb-4">
+              <label className="label">OpenAI Voice</label>
+              <select
+                value={openaiTtsVoice}
+                onChange={(e) => setOpenaiTtsVoice(e.target.value)}
+                className="select select-bordered w-full"
+              >
+                {['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+              <label className="label">
+                <span className="label-text-alt">Uses the OpenAI API key from the Model section above - no separate key needed.</span>
+              </label>
+            </div>
+          )}
+        </>
       )}
       <div className="mb-4">
         <label className="label">Primary Language</label>
@@ -850,6 +954,61 @@ const Settings: React.FC = () => {
           className="range range-xs"
         />
       </div>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">Audio Capture</h2>
+      <div className="mb-4">
+        <label className="label">Source</label>
+        <select
+          value={audioCaptureMode}
+          onChange={(e) => setAudioCaptureMode(e.target.value as 'system' | 'microphone' | 'both')}
+          className="select select-bordered w-full"
+        >
+          <option value="system">System audio (screen/window share)</option>
+          <option value="microphone">Microphone only</option>
+          <option value="both">Both, mixed together</option>
+        </select>
+        <label className="label">
+          <span className="label-text-alt">
+            System audio picks up what plays through speakers (a remote call) via the OS share picker. Microphone
+            picks up what's said in the room. "Both" mixes them into one transcript - useful for an in-person
+            interview joined by call.
+          </span>
+        </label>
+      </div>
+      {(audioCaptureMode === 'microphone' || audioCaptureMode === 'both') && (
+        <div className="mb-4">
+          <label className="label">Microphone</label>
+          <select
+            value={audioInputDeviceId}
+            onChange={(e) => setAudioInputDeviceId(e.target.value)}
+            className="select select-bordered w-full"
+          >
+            <option value="">System default</option>
+            {audioInputs.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      <div className="mb-4 flex flex-wrap gap-4 text-sm">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={audioEchoCancellation} onChange={(e) => setAudioEchoCancellation(e.target.checked)} className="checkbox checkbox-sm" />
+          Echo cancellation
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={audioNoiseSuppression} onChange={(e) => setAudioNoiseSuppression(e.target.checked)} className="checkbox checkbox-sm" />
+          Noise suppression
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={audioAutoGain} onChange={(e) => setAudioAutoGain(e.target.checked)} className="checkbox checkbox-sm" />
+          Auto gain control
+        </label>
+      </div>
+      <p className="text-xs opacity-50 -mt-3 mb-4">
+        On by default. Turning noise suppression off can help if it's clipping non-speech audio (e.g. a shared video) you actually want transcribed.
+      </p>
 
       <h2 className="text-lg font-bold mt-6 mb-2">Interview Recording</h2>
       <div className="mb-4">
