@@ -46,6 +46,7 @@ const Settings: React.FC = () => {
 
   const [windowOpacity, setWindowOpacity] = useState(1);
   const [obsidianVaultPath, setObsidianVaultPath] = useState('');
+  const [obsidianAutoSummary, setObsidianAutoSummary] = useState(false);
   const [resume, setResume] = useState('');
   const [questionDetectionAiFallback, setQuestionDetectionAiFallback] = useState(true);
   const [ttsOutputDeviceId, setTtsOutputDeviceId] = useState('');
@@ -84,6 +85,8 @@ const Settings: React.FC = () => {
   const [aiLetterSaving, setAiLetterSaving] = useState(false);
   const [aiLetterSaved, setAiLetterSaved] = useState(false);
   const [encryptionAvailable, setEncryptionAvailable] = useState<boolean | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupMessage, setBackupMessage] = useState('');
 
   type SettingsSection = 'model' | 'voice' | 'control' | 'app';
   const [activeSection, setActiveSection] = useState<SettingsSection>('model');
@@ -248,6 +251,7 @@ const Settings: React.FC = () => {
       setRecordingsFolder(config.recordings_folder || '');
       setWindowOpacity(typeof config.window_opacity === 'number' ? config.window_opacity : 1);
       setObsidianVaultPath(config.obsidian_vault_path || '');
+      setObsidianAutoSummary(!!config.obsidian_auto_summary);
       setResume(config.resume || '');
       setQuestionDetectionAiFallback(config.question_detection_ai_fallback !== false);
       setTtsOutputDeviceId(config.tts_output_device_id || '');
@@ -300,6 +304,7 @@ const Settings: React.FC = () => {
         recordings_folder: recordingsFolder,
         window_opacity: windowOpacity,
         obsidian_vault_path: obsidianVaultPath,
+        obsidian_auto_summary: obsidianAutoSummary,
         resume,
         tts_output_device_id: ttsOutputDeviceId,
         tts_volume: ttsVolume,
@@ -329,6 +334,36 @@ const Settings: React.FC = () => {
       }
     } catch (err) {
       setError('Failed to open the folder picker.');
+    }
+  };
+
+  const handleExportConfig = async () => {
+    setBackupBusy(true);
+    setBackupMessage('');
+    try {
+      const result = await window.electronAPI.exportConfig();
+      if (!result.canceled) setBackupMessage(`Saved to ${result.path}`);
+    } catch {
+      setError('Failed to export settings.');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleImportConfig = async () => {
+    if (!window.confirm('This replaces all current settings with the ones in the chosen file. Continue?')) return;
+    setBackupBusy(true);
+    setBackupMessage('');
+    try {
+      const result = await window.electronAPI.importConfig();
+      if (!result.canceled) {
+        await loadConfig();
+        setBackupMessage('Settings imported.');
+      }
+    } catch {
+      setError('Failed to import settings - the file may not be valid.');
+    } finally {
+      setBackupBusy(false);
     }
   };
 
@@ -914,9 +949,28 @@ const Settings: React.FC = () => {
           </button>
         </div>
         <label className="label">
-          <span className="label-text-alt">Browse and view your .md notes from the Notes tab. Read-only, does not modify the vault.</span>
+          <span className="label-text-alt">Browse and view your .md notes from the Notes tab.</span>
         </label>
       </div>
+      {obsidianVaultPath && (
+        <div className="mb-4">
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={obsidianAutoSummary}
+              onChange={(e) => setObsidianAutoSummary(e.target.checked)}
+              className="checkbox mr-2"
+            />
+            <span>Auto-summarize each interview into the vault</span>
+          </label>
+          <label className="label">
+            <span className="label-text-alt">
+              When you stop listening, sends the transcript to your model provider and writes the summary to
+              "Interview Summaries/" in the vault - alongside the raw transcript that's always saved.
+            </span>
+          </label>
+        </div>
+      )}
 
       </>
       )}
@@ -1082,6 +1136,25 @@ const Settings: React.FC = () => {
 
       {activeSection === 'app' && (
       <>
+      <h2 className="text-lg font-bold mt-6 mb-2">Backup &amp; Restore</h2>
+      <div className="mb-4">
+        <div className="flex gap-2">
+          <button type="button" onClick={handleExportConfig} className="btn btn-outline btn-sm flex-1" disabled={backupBusy}>
+            Export settings
+          </button>
+          <button type="button" onClick={handleImportConfig} className="btn btn-outline btn-sm flex-1" disabled={backupBusy}>
+            Import settings
+          </button>
+        </div>
+        <label className="label">
+          <span className="label-text-alt">
+            Saves everything (providers, model slots, Kanban board, hotkeys) to one JSON file. Encrypted API keys stay
+            encrypted in the file and only decrypt again on this same Windows account.
+          </span>
+        </label>
+        {backupMessage && <p className="text-xs text-success mt-1">{backupMessage}</p>}
+      </div>
+
       <h2 className="text-lg font-bold mt-6 mb-2">Usage Stats</h2>
       <div className="grid grid-cols-2 gap-2 mb-4 text-sm">
         <div className="card-surface bg-base-200 p-2">

@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     mode: string;
     messages: { role: string; content: string; attachments?: { dataUrl: string }[] }[];
   }) => ipcRenderer.invoke('ask-llm', params),
+  askLLMSilent: (params: { config: any; mode: string; messages: { role: string; content: string }[] }) =>
+    ipcRenderer.invoke('ask-llm-silent', params),
   readClipboardImage: () => ipcRenderer.invoke('read-clipboard-image'),
   readClipboardText: () => ipcRenderer.invoke('read-clipboard-text'),
   openRegionSelect: () => ipcRenderer.invoke('open-region-select'),
@@ -50,6 +52,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listObsidianNotes: (vaultPath: string) => ipcRenderer.invoke('list-obsidian-notes', vaultPath),
   readObsidianNote: (vaultPath: string, relativePath: string) =>
     ipcRenderer.invoke('read-obsidian-note', { vaultPath, relativePath }),
+  writeObsidianNote: (vaultPath: string, relativePath: string, content: string) =>
+    ipcRenderer.invoke('write-obsidian-note', { vaultPath, relativePath, content }),
+  exportConfig: () => ipcRenderer.invoke('export-config'),
+  importConfig: () => ipcRenderer.invoke('import-config'),
   speak60db: (text: string, config: any) => ipcRenderer.invoke('speak-60db', { text, config }),
   get60dbVoices: (config: any) => ipcRenderer.invoke('get-60db-voices', config),
   speakTTS: (text: string, config: any) => ipcRenderer.invoke('speak-tts', { text, config }),

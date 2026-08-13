@@ -18,6 +18,7 @@ export interface ElectronAPI {
     mode: string;
     messages: { role: string; content: string; attachments?: { dataUrl: string }[] }[];
   }) => Promise<{ requestId: string; content?: string; error?: string }>;
+  askLLMSilent: (params: { config: any; mode: string; messages: { role: string; content: string }[] }) => Promise<{ content?: string; error?: string }>;
   readClipboardImage: () => Promise<string | null>;
   readClipboardText: () => Promise<string>;
   openRegionSelect: () => Promise<void>;
@@ -43,6 +44,9 @@ export interface ElectronAPI {
   chooseObsidianFolder: () => Promise<{ canceled: boolean; path?: string }>;
   listObsidianNotes: (vaultPath: string) => Promise<string[]>;
   readObsidianNote: (vaultPath: string, relativePath: string) => Promise<string>;
+  writeObsidianNote: (vaultPath: string, relativePath: string, content: string) => Promise<{ path: string }>;
+  exportConfig: () => Promise<{ canceled: boolean; path?: string }>;
+  importConfig: () => Promise<{ canceled: boolean }>;
   transcribeAudio: (audioBuffer: ArrayBuffer, config: any) => Promise<TranscriptionResult>;
   speak60db: (text: string, config: any) => Promise<{ success: boolean; audio_base64?: string; output_format?: string; error?: string }>;
   get60dbVoices: (config: any) => Promise<{ success: boolean; voices: Array<{ voice_id: string; name: string; labels?: { language_name?: string; gender?: string; accent?: string } }>; error?: string }>;

@@ -638,6 +638,37 @@ const OverlayPage: React.FC = () => {
       window.electronAPI.saveTranscript(transcriptMd, meetingName).catch(() => {
         setError("Failed to save the interview transcript.");
       });
+      summarizeToObsidian(transcriptMd);
+    }
+  };
+
+  // Fire-and-forget: only runs if a vault is configured and the toggle is
+  // on. Uses ask-llm-silent (no chunk broadcasts) so a background summary
+  // can't flash into the visible chat's liveAnswer right as the user stops
+  // listening.
+  const summarizeToObsidian = async (transcriptMd: string) => {
+    try {
+      const config = await window.electronAPI.getConfig();
+      if (!config.obsidian_vault_path || !config.obsidian_auto_summary) return;
+      const result = await window.electronAPI.askLLMSilent({
+        config,
+        mode: "explain",
+        messages: [
+          {
+            role: "user",
+            content: `Summarize this interview transcript into concise markdown notes - key topics covered, notable answers, anything to follow up on. Keep it factual, no filler:\n\n${transcriptMd}`,
+          },
+        ],
+      });
+      if (!result.content) return;
+      const title = `${meetingName || "Interview"} - ${new Date().toLocaleDateString()}`;
+      await window.electronAPI.writeObsidianNote(
+        config.obsidian_vault_path,
+        `Interview Summaries/${title.replace(/[\\/:*?"<>|]/g, "-")}.md`,
+        `# ${title}\n\n${result.content}`
+      );
+    } catch {
+      // Best-effort - the transcript itself already saved above regardless.
     }
   };
 

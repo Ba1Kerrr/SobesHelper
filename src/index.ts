@@ -584,6 +584,17 @@ ipcMain.handle("read-obsidian-note", (event, { vaultPath, relativePath }: { vaul
   return fs.readFileSync(target, "utf-8");
 });
 
+ipcMain.handle("write-obsidian-note", (event, { vaultPath, relativePath, content }: { vaultPath: string; relativePath: string; content: string }) => {
+  const root = path.resolve(vaultPath);
+  const target = path.resolve(root, relativePath);
+  if (!target.startsWith(root)) {
+    throw new Error("Invalid note path");
+  }
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, content, "utf-8");
+  return { path: target };
+});
+
 ipcMain.handle("list-recordings", () => {
   const config = store.get("config") || {};
   const baseFolder = config.recordings_folder || path.join(app.getPath("documents"), "Interview-Assistant Recordings");
@@ -954,6 +965,33 @@ ipcMain.handle("set-config", (event, config) => {
   store.set("config", encryptConfig(config));
 });
 
+// Writes the raw stored config (secrets stay in their encrypted enc: form,
+// same as on disk) rather than the decrypted get-config shape - a portable
+// backup file should never contain plaintext keys. Encrypted values only
+// decrypt back on the same OS account (safeStorage/DPAPI), so a backup
+// restored on another machine just loses those - decryptConfig() already
+// handles that by clearing the field instead of erroring.
+ipcMain.handle("export-config", async () => {
+  const result = await dialog.showSaveDialog({
+    defaultPath: "interview-assistant-backup.json",
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+  fs.writeFileSync(result.filePath, JSON.stringify(store.get("config") || {}, null, 2), "utf-8");
+  return { canceled: false, path: result.filePath };
+});
+
+ipcMain.handle("import-config", async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ["openFile"],
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (result.canceled || !result.filePaths[0]) return { canceled: true };
+  const config = JSON.parse(fs.readFileSync(result.filePaths[0], "utf-8"));
+  store.set("config", config);
+  return { canceled: false };
+});
+
 // Reads via Electron's own clipboard API (main process), not the web
 // Clipboard API - the renderer's permission handler denies everything except
 // "media", which would otherwise block clipboard-read entirely.
@@ -1188,6 +1226,29 @@ ipcMain.handle(
       return { requestId, error: error?.message || "Unknown error occurred" };
     } finally {
       activeAskControllers.delete(requestId);
+    }
+  }
+);
+
+// A plain one-shot completion with no llm-chunk/llm-done broadcasts - ask-llm
+// broadcasts globally, which would bleed into whatever's rendering the live
+// chat (e.g. a background summary would flash into the visible liveAnswer).
+// Used for the post-interview Obsidian summary, generated after the user has
+// already stopped listening.
+ipcMain.handle(
+  "ask-llm-silent",
+  async (
+    event,
+    { config, mode, messages }: { config: any; mode: InterviewMode; messages: { role: string; content: string }[] }
+  ) => {
+    try {
+      let content = "";
+      for await (const chunk of askWithMode(config, mode, messages as any, {})) {
+        content += chunk.delta;
+      }
+      return { content };
+    } catch (error: any) {
+      return { error: error?.message || "Unknown error occurred" };
     }
   }
 );
